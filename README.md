@@ -8,12 +8,8 @@ Object processes designed in VB.NET are easily replicated in other languages, al
 To use, download and unzip contents of OXcli.zip into local folder. Windows recommended at this time.
 
 OXCLI commands utilizing OX GraphQL API require a simple Python script located in the \python folder.
-Modify the .env file with your OX API KEY.
+Modify the .env file with your OX API KEY, or use CLI command "setenv --key {ox_api_key}"
 
 In order for Python to run, test using:  python python_examp.py help
 
-Likely will require:
-
 pip install -r requirements
-pip install python-getenv
-pip install jsonpickle
