@@ -508,6 +508,7 @@ nextChr:
         If File.Exists(fileN) = False Then
             Exit Sub
         Else
+            'Console.WriteLine("Killing " + fileN)
             Kill(fileN)
         End If
     End Sub
@@ -776,6 +777,10 @@ errorCatch:
 
         Return json
     End Function
+
+
+
+
 
     '    Public Function getJSONObject(key$, json$) As String
     '        On Error GoTo errorcatch
