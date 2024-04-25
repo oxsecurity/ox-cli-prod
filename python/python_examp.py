@@ -50,8 +50,13 @@ if sys.argv[1].lower() == 'help':
     print('getApps')
     print('getAppInventory')
     print('getAppInfo')
-    print('sbomLibs')
-    print('sbomLibStats')
+    print('getSbomLibs')
+    print('getSbomLibStats')
+    print('getSbomShort')
+    print('getIssuesShort')
+    print('getAppsShort')
+    print('getAppsTags')
+    print('getSbomFilters')
     exit()    
 
 # Reading Query and Variables files for GraphQL API
@@ -81,19 +86,24 @@ body = {
 }
 
 # Post Request
+attempts = 3
 
-try:
-    response = requests.post(apiurl, headers=headers, json=body)
-    if response.status_code == 200:
-        result = response.json()
-        passresult = json.dumps(result, indent=2)
-        fileN = sys.argv[1]+'_response' 
-        writeJSON(fileN,passresult)
-        # if sys.argv[1].lower() == 'getissues':
-        #   show_issues(passresult)
-    else:
-        print(f'GraphQL request failed with status code: {response.status_code}')
-
-except requests.exceptions.RequestException as error:
-    print(f'Error: {error}')
+while attempts:
+    try:
+        response = requests.post(apiurl, headers=headers, json=body, timeout=60)
+        if response.status_code == 200:
+            result = response.json()
+            passresult = json.dumps(result, indent=2)
+            fileN = sys.argv[1]+'_response' 
+            writeJSON(fileN,passresult)
+            # if sys.argv[1].lower() == 'getissues':
+            #   show_issues(passresult)
+            break
+        else:
+            print(f'GraphQL request failed with status code: {response.status_code}')
+            break
+    except TimeoutError:
+        attempts -= 1
+    except requests.exceptions.RequestException as error:
+        print(f'Error: {error}')
 
