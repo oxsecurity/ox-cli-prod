@@ -1,0 +1,16 @@
+query GetIssues($isDemo: Boolean, $getIssuesInput: IssuesInput) {
+  getIssues(isDemo: $isDemo, getIssuesInput: $getIssuesInput) {
+    issues {
+      id
+      issueId
+	  mainTitle
+      created
+      scanId
+      createdAt
+    }
+    totalIssues
+    totalFilteredIssues
+    totalResolvedIssues
+    offset
+  }
+}

@@ -1,3 +1,1 @@
-{"getApplicationsInput": {
-  "offset": 0,
-  "limit": 200000}}
+{"offset":200,"limit":500}

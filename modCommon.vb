@@ -286,7 +286,14 @@ dontEvalCase:
 
     Public Function safeFilename(ByVal a) As String
         safeFilename = Replace(a, "\", "")
-        safeFilename = Replace(safeFilename, "..", "")
+        safeFilename = Replace(safeFilename, "..", ".")
+        safeFilename = Replace(safeFilename, "/", "")
+        safeFilename = Replace(safeFilename, "|", "")
+        safeFilename = Replace(safeFilename, "*", "0")
+        safeFilename = Replace(safeFilename, ":", ".")
+        safeFilename = Replace(safeFilename, "?", ".")
+        safeFilename = Replace(safeFilename, "<", "_")
+        safeFilename = Replace(safeFilename, ">", "_")
     End Function
 
 
@@ -778,9 +785,32 @@ errorCatch:
         Return json
     End Function
 
+    Public Function returnSeverityNum(sevString$) As Integer
+        returnSeverityNum = 0
+        Select Case LCase(sevString)
+            Case "info"
+                returnSeverityNum = 1
+            Case "low"
+                returnSeverityNum = 2
+            Case "medium"
+                returnSeverityNum = 3
+            Case "high"
+                returnSeverityNum = 4
+            Case "critical"
+                returnSeverityNum = 5
+            Case "appoxalypse"
+                returnSeverityNum = 6
+        End Select
+    End Function
 
+    Public Sub goUpALine()
+        On Error GoTo errorcatch
+        Console.SetCursorPosition(0, Console.CursorTop - 1)
+        Console.WriteLine(spaces(150))
+        Console.SetCursorPosition(0, Console.CursorTop - 2)
 
-
+errorcatch:
+    End Sub
 
     '    Public Function getJSONObject(key$, json$) As String
     '        On Error GoTo errorcatch

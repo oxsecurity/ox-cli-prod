@@ -109,9 +109,17 @@ errorcatch:
 
     ' Writing the VARS files - consider bringing from main into wrapper
     ' set JSON object as *.variables.json file 
-
+    Public Function jsonGetNewIssueDetailVars(issueInput As newIssueDetailRequestVARS) As String
+        Dim jsoN$ = JsonConvert.SerializeObject(issueInput)
+        Return jsoN
+    End Function
     Public Function jsonGetNewTagVars(newTag As newTagRequestVARS) As String
         Dim jsoN$ = JsonConvert.SerializeObject(newTag)
+        Return jsoN
+    End Function
+
+    Public Function jsonGetAppsVars(nAppList As appsRequestVARS) As String
+        Dim jsoN$ = JsonConvert.SerializeObject(nAppList)
         Return jsoN
     End Function
 
@@ -136,6 +144,12 @@ errorcatch:
         json = nD.SelectToken("data").SelectToken("getIssues").SelectToken("issues").ToString
         returnIssues = JsonConvert.DeserializeObject(Of List(Of issueS))(json)
     End Function
+    Public Function returnShortIssues(json$) As List(Of issueShort)
+        returnShortIssues = New List(Of issueShort)
+        Dim nD As JObject = JObject.Parse(json)
+        json = nD.SelectToken("data").SelectToken("getIssues").SelectToken("issues").ToString
+        returnShortIssues = JsonConvert.DeserializeObject(Of List(Of issueShort))(json)
+    End Function
 
     Public Function getTagId(jSon$) As String
         getTagId = ""
@@ -156,6 +170,17 @@ errorcatch:
         jsoN = nD.SelectToken("data").SelectToken("getIssues").ToString
 
         getListIssues = JsonConvert.DeserializeObject(Of listIssues)(jsoN)
+
+    End Function
+
+
+    Public Function getListAppsPaging(fileN$) As listApps
+        getListAppsPaging = New listApps
+        Dim jsoN$ = streamReaderTxt(fileN)
+        Dim nD As JObject = JObject.Parse(jsoN)
+        jsoN = nD.SelectToken("data").SelectToken("getApplications").ToString
+
+        getListAppsPaging = JsonConvert.DeserializeObject(Of listApps)(jsoN)
 
     End Function
 
@@ -361,6 +386,164 @@ Public Class listIssues
     Public totalResolvedIssues As Long
     Public offset As Long
 End Class
+Public Class listApps
+    '    "totalIssues": 560,
+    '      "totalFilteredIssues": 30,
+    '      "totalResolvedIssues": 0,
+    '      "offset": 50
+    ' Public issues As List(Of oxIssueS)
+    Public total As Long
+    Public totalFilteredApps As Long
+    Public totalIrrelevantApps As Long
+    Public offset As Long
+End Class
+
+
+
+Public Class singleIssue
+    'dependencyGraph
+    'sbom
+    Public id As String
+    Public issueId As String
+    Public gptInfo As oxGPT
+    Public isGPTFixAvailable As Boolean
+    Public name As String
+    Public scanId As String
+    Public created As Long
+    Public scanDate As Long
+    Public mainTitle As String
+    Public secondTitle As String
+    Public description As String
+    Public severity As String
+    Public owners As List(Of String)
+    Public ruleId As String
+    Public originalToolSeverity As String
+    Public exclusionCategory As String
+    Public occurrences As Integer
+    Public comment As String
+    Public learnMore As List(Of String)
+    Public exclusionId As String
+    Public resource As issueResources
+    Public isMonoRepoChild As Boolean
+    Public monoRepoParent As String
+    Public isFixAvailable As Boolean
+    'Public prDeatils As String
+    'public autofix
+    Public extraInfo As List(Of kvPair)
+    'Public lots of APP info here
+    Public app As issueApp
+    Public policy As oxPolicy
+    Public category As oxCategory
+    Public isPRAvailable As Boolean
+    'public aggregations
+    Public recommendation As String
+    Public violationInfoTitle As String
+    Public sourceTools As List(Of String)
+    Public cwe As List(Of String)
+    Public cweList As List(Of cweInfo)
+    Public severityChangedReason As List(Of sevFactor)
+    Public tickets As List(Of String)
+    Public oscarData As List(Of oxOscar)
+    Public Sub New()
+        sourceTools = New List(Of String)
+    End Sub
+    Public Function numSevFactors(Optional ByVal numReachable As Boolean = False, Optional ByVal numExploitable As Boolean = False, Optional ByVal damagE As Boolean = False) As Integer
+        numSevFactors = Me.severityChangedReason.Count
+
+        If numReachable = False And numExploitable = False And damagE = False Then
+            Exit Function
+        End If
+        numSevFactors = 0
+
+        For Each SF In Me.severityChangedReason
+            If numReachable = True And SF.changeCategory = "Reachable" Then numSevFactors += 1
+            If numExploitable = True And SF.changeCategory = "Exploitable" Then numSevFactors += 1
+            If damagE = True And SF.changeCategory = "Damage" Then numSevFactors += 1
+        Next
+
+    End Function
+    Public Function increasedSev() As Boolean
+        increasedSev = False
+        If returnSeverityNum(Me.originalToolSeverity) < returnSeverityNum(Me.severity) Then increasedSev = True
+    End Function
+    Public Function decreasedSev() As Boolean
+        decreasedSev = False
+        If returnSeverityNum(Me.originalToolSeverity) > returnSeverityNum(Me.severity) Then decreasedSev = True
+    End Function
+
+End Class
+
+Public Class issueResources
+    Public id As String
+    Public [type] As String
+End Class
+Public Class issueApp
+    '  "app": {
+    '      "id": "*aem-dispatcher",
+    '      "name": "*aem-dispatcher",
+    '      "businessPriority": 31.890410958904113,
+    '      "type": "Git",
+    '      "originBranchName": "",
+    '      "repoId": null,
+    Public id As String
+    Public name As String
+    Public businessPriority As Long
+
+End Class
+Public Class oxOscar
+    Public id As String
+    Public name As String
+    Public description As String
+    Public url As String
+End Class
+Public Class sevFactor
+    Public changeNumber As Long
+    Public reason As String
+    Public shortName As String
+    Public changeCategory As String
+    Public extraInfo As List(Of extraInfoSF)
+End Class
+Public Class extraInfoSF
+    Public [key] As String
+    Public link As String
+    Public snippet As oxSnippet
+End Class
+Public Class oxSnippet
+    Public snippetLineNumber As Long
+    Public language As String
+    Public [text] As String
+    Public filename As String
+End Class
+Public Class cweInfo
+    Public name As String
+    Public description As String
+    Public url As String
+End Class
+Public Class oxGPT
+    Public createdAt As String
+    Public user As String
+    Public gptResponse As String
+End Class
+Public Class kvPair
+    Public key As String
+    Public value As String
+End Class
+'Public Class oxCategory
+'    Public name As String
+'    Public categoryId As Integer
+'End Class
+'Public Class oxPolicy
+'    Public id As String
+'    Public name As String
+'    Public detailedDescription As String
+'End Class
+Public Class issueShort
+    Public id As String
+    Public issueId As String
+    Public scanId As String
+    Public created As Long
+    Public createdAt As Long
+End Class
 Public Class issueS
     ' {
     '     "id": "651110199778b62c06b261b5",
@@ -395,6 +578,7 @@ Public Class issueS
     Public occurrences As Integer
     Public comment As String
     Public severity As String
+    Public createdAt As Long
     Public policy As oxPolicy
     Public category As oxCategory
     Public app As oxApp
@@ -418,6 +602,23 @@ End Class
 
 
 ' Group these together
+
+Public Class newIssueDetailRequestVARS
+    '    {
+    '  "getSingleIssueInput": {
+    '    "issueId": "584352228-oxPolicy_securityScan_55-CKV_AWS_20-false"
+    '  }
+    '}
+    Public getSingleIssueInput As nidWrap1
+
+    Public Sub New(issueId$)
+        getSingleIssueInput = New nidWrap1
+        getSingleIssueInput.issueId = issueId
+    End Sub
+End Class
+Public Class nidWrap1
+    Public issueId As String
+End Class
 
 Public Class newTagRequestVARS
     '    {
@@ -458,6 +659,20 @@ Public Class ntrVars
     Public displayName As String
     Public name As String
     Public tagType As String
+End Class
+
+Public Class appsRequestVARS
+    '    {"getApplicationsInput": {
+    '  "offset": 0,
+    '  "limit": 200000}}
+
+    Public offset As Long
+    Public limit As Long
+
+    Public Sub New(offS As Long)
+        offset = offS
+        limit = 500
+    End Sub
 End Class
 
 Public Class issueRequestVARS

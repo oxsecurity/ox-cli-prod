@@ -79,14 +79,15 @@ Public Class customRPT
         xlWB.RefreshAll()
         xlWS.Columns.AutoFit()
 
-
+        Dim tData$ = "TF"
+        If Len(rArgs.s3) Then tData = rArgs.s3
 
         If doPivot = True Then
             xlWS.Name = "RAW_DATA"
             xlWS = xlWB.Sheets.Add
             xlWS.Name = "Pivot"
             xlWS.Activate()
-            Call xlWSdoPivot(xlWS, numRows + 1, F, "TF", appXL)
+            Call xlWSdoPivot(xlWS, numRows + 1, F, tData, appXL)
         End If
 
         Dim numCopies As Integer = 0
@@ -123,6 +124,8 @@ Public Class customRPT
 
         'GoTo skipToHere
 
+        Console.WriteLine("Pivot created with pattern: " + tData)
+
         Select Case tData$
             Case "TF"
                 PT.AddDataField(PT.PivotFields("#_ISSUES"))
@@ -131,6 +134,24 @@ Public Class customRPT
                 rPF.Orientation = Excel.XlPivotFieldOrientation.xlRowField
 
                 Dim cPF = CType(PT.PivotFields("CATEGORY"), Microsoft.Office.Interop.Excel.PivotField)
+                cPF.Orientation = Excel.XlPivotFieldOrientation.xlColumnField
+
+            Case "IR"
+                PT.AddDataField(PT.PivotFields("#_ISSUES"))
+
+                Dim rPF = CType(PT.PivotFields("CATEGORY"), Microsoft.Office.Interop.Excel.PivotField)
+                rPF.Orientation = Excel.XlPivotFieldOrientation.xlRowField
+
+                Dim cPF = CType(PT.PivotFields("SEVERITY"), Microsoft.Office.Interop.Excel.PivotField)
+                cPF.Orientation = Excel.XlPivotFieldOrientation.xlColumnField
+
+            Case "SF"
+                PT.AddDataField(PT.PivotFields("#_SF"))
+
+                Dim rPF = CType(PT.PivotFields("SF_NAME"), Microsoft.Office.Interop.Excel.PivotField)
+                rPF.Orientation = Excel.XlPivotFieldOrientation.xlRowField
+
+                Dim cPF = CType(PT.PivotFields("RED"), Microsoft.Office.Interop.Excel.PivotField)
                 cPF.Orientation = Excel.XlPivotFieldOrientation.xlColumnField
 
 

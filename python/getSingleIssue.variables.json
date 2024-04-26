@@ -1,5 +1,1 @@
-{
-  "getSingleIssueInput": {
-    "issueId": "584352228-oxPolicy_securityScan_120-org.springframework:spring-web_5.3.19"
-  }
-}
+{"getSingleIssueInput":{"issueId":"*GCP-non-pci-gke-prod-Cloud-oxPolicy_securityCloudScan_100-be0a9aaa-a8d5-4602-b217-871c3c3d2ff2_virtual_machine"}}
