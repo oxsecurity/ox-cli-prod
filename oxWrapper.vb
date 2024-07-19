@@ -123,6 +123,11 @@ errorcatch:
         Return jsoN
     End Function
 
+    Public Function jsonGetIrrelevantAppsVars(nAppList As appsIrrelevantRequestVARS) As String
+        Dim jsoN$ = JsonConvert.SerializeObject(nAppList)
+        Return jsoN
+    End Function
+
     Public Function jsonGetIssuesVars(giV As issueRequestVARS) As String
         Dim jsoN$ = JsonConvert.SerializeObject(giV)
         Return jsoN
@@ -144,6 +149,15 @@ errorcatch:
         json = nD.SelectToken("data").SelectToken("getIssues").SelectToken("issues").ToString
         returnIssues = JsonConvert.DeserializeObject(Of List(Of issueS))(json)
     End Function
+
+    Public Function returnMediumIssues(json$) As List(Of issuesMedium)
+        returnMediumIssues = New List(Of issuesMedium)
+        Dim nD As JObject = JObject.Parse(json)
+        json = nD.SelectToken("data").SelectToken("getIssues").SelectToken("issues").ToString
+        returnMediumIssues = JsonConvert.DeserializeObject(Of List(Of issuesMedium))(json)
+    End Function
+
+
     Public Function returnShortIssues(json$) As List(Of issueShort)
         returnShortIssues = New List(Of issueShort)
         Dim nD As JObject = JObject.Parse(json)
@@ -184,6 +198,15 @@ errorcatch:
 
     End Function
 
+    Public Function getConnectionsFromJson(jsoN$) As List(Of connectorFamily)
+        getConnectionsFromJson = New List(Of connectorFamily)
+        Dim nD As JObject = JObject.Parse(jsoN)
+        jsoN = nD.SelectToken("data").SelectToken("getConnectorsByFamily").ToString
+
+        getConnectionsFromJson = JsonConvert.DeserializeObject(Of List(Of connectorFamily))(jsoN)
+
+    End Function
+
     Public Function getAppInfoShort(jsoN$) As List(Of oxAppshort)
         getAppInfoShort = New List(Of oxAppshort)
 
@@ -191,6 +214,15 @@ errorcatch:
         jsoN = nD.SelectToken("data").SelectToken("getApplications").SelectToken("applications").ToString
 
         getAppInfoShort = JsonConvert.DeserializeObject(Of List(Of oxAppshort))(jsoN)
+    End Function
+
+    Public Function getAppIrrelevant(jsoN$) As List(Of oxAppIrrelevant)
+        getAppIrrelevant = New List(Of oxAppIrrelevant)
+
+        Dim nD As JObject = JObject.Parse(jsoN)
+        jsoN = nD.SelectToken("data").SelectToken("getApplications").SelectToken("applications").ToString
+
+        getAppIrrelevant = JsonConvert.DeserializeObject(Of List(Of oxAppIrrelevant))(jsoN)
     End Function
 
     Public Function getAllTags(jsoN$) As List(Of oxTag)
@@ -245,6 +277,31 @@ Public Class oxUserLogEntry
     Public userEmail As String
     Public domain As String
     Public [date] As DateTime
+End Class
+
+Public Class oxAppIrrelevant
+    '   "appId": "51548962",
+    ' "appName": "WebGoat",
+    ' "lastCodeChange": "1698193900331",
+    ' "irrelevantReasons": [
+    '     "No code changes in the last 6 months"
+    ' ],
+    ' "overrideRelevance": "default",
+    ' "type": "GitLab",
+    ' "fakeApp": false
+
+    Public appId As String
+    Public appName As String
+    Public lastCodeChange As String
+    Public irrelevantReasons As List(Of String)
+    Public overrideRelevance As String
+    Public [type] As String
+    Public fakeApp As Boolean
+
+    Public Sub New()
+        irrelevantReasons = New List(Of String)
+    End Sub
+
 End Class
 
 Public Class oxAppshort
@@ -497,7 +554,7 @@ Public Class oxOscar
     Public url As String
 End Class
 Public Class sevFactor
-    Public changeNumber As Long
+    Public changeNumber As Decimal
     Public reason As String
     Public shortName As String
     Public changeCategory As String
@@ -600,6 +657,122 @@ Public Class oxApp
 
 End Class
 
+Public Class issuesMedium
+    Public id As String
+    Public issueId As String
+    Public mainTitle As String
+    Public secondTitle As String
+    Public name As String
+    Public created As Long
+    Public createdAt As Long
+    Public scanId As String
+    Public owners As List(Of String)
+    Public occurrences As Integer
+    Public severity As String
+    Public originalToolSeverity As String
+    Public aggregations As oxAgg
+    Public policy As oxPolicy
+    Public category As oxCategory
+    Public app As oxApp
+    Public severityChangedReason As List(Of sevFactor)
+End Class
+Public Class oxAgg
+    Public summary As oxSumm
+    Public [type] As String
+    Public items As List(Of oxSource)
+End Class
+Public Class oxSource
+    Public source As String
+    Public commitBy As String
+End Class
+Public Class oxSumm
+    Public summary As String
+    Public comment As String
+End Class
+
+Public Class oxCats
+    'blend of source and category
+    Public name As String
+    Public count As Integer
+    Public numA As Integer
+    Public numC As Integer
+    Public numH As Integer
+    Public numM As Integer
+    Public numL As Integer
+    Public numI As Integer
+End Class
+
+Public Class issuesClass
+    Public allIssues As List(Of issuesMedium)
+
+    Public Function numSev(criticalitY$) As Integer
+        numSev = 0
+        For Each I In allIssues
+            Dim seV$ = LCase(I.severity)
+            If seV = LCase(criticalitY) Then numSev += 1
+        Next
+    End Function
+
+    Public Function categorieS() As List(Of oxCats)
+        categorieS = New List(Of oxCats)
+        Dim unqList As Collection = New Collection
+        For Each I In allIssues
+            If grpNDX(unqList, I.category.name) = 0 Then
+                unqList.Add(I.category.name)
+            End If
+        Next
+        For Each N In unqList
+            Dim oC As oxCats = New oxCats
+            oC.name = N
+            categorieS.Add(oC)
+        Next
+
+        'now add em all up
+        For Each O In categorieS
+            For Each I In allIssues
+                If O.name = I.category.name Then
+                    O.count += 1
+                    Select Case (LCase(I.severity))
+                        Case "info"
+                            O.numI += 1
+                        Case "low"
+                            O.numL += 1
+                        Case "medium"
+                            O.numM += 1
+                        Case "high"
+                            O.numH += 1
+                        Case "critical"
+                            O.numC += 1
+                        Case "appoxalypse"
+                            O.numA += 1
+                    End Select
+                End If
+            Next
+        Next
+    End Function
+
+    Public Function sumCats() As String
+        sumCats = ""
+        Dim allC As List(Of oxCats) = Me.categorieS
+
+        For Each C In allC
+            Dim newStr$ = ""
+            sumCats += C.name + ": "
+            If C.numA Then newStr += C.numA.ToString + " Appoxalypse,"
+            If C.numC Then newStr += C.numC.ToString + " Critical,"
+            If C.numM Then newStr += C.numM.ToString + " Medium,"
+            If C.numL Then newStr += C.numL.ToString + " Low,"
+            If C.numI Then newStr += C.numI.ToString + " Info,"
+
+            sumCats += C.count.ToString + vbCrLf 'Mid(newStr, 1, Len(newStr) - 1) + ")" + vbCrLf
+        Next
+
+    End Function
+
+    Public Sub New(issues As List(Of issuesMedium))
+        allIssues = issues
+    End Sub
+End Class
 
 ' Group these together
 
@@ -660,7 +833,58 @@ Public Class ntrVars
     Public name As String
     Public tagType As String
 End Class
+Public Class appsIrrelevantRequestVARS
+    Public getApplicationsInput As appsIrrelevantRequestFields
 
+    Public Sub New(offset As Long)
+        getApplicationsInput = New appsIrrelevantRequestFields(offset)
+    End Sub
+End Class
+Public Class appsIrrelevantRequestFields
+    '    {
+    '  "getApplicationsInput": {
+    '    "applicationFilters": [
+    '      "Irrelevant"
+    '    ],
+    '    "irrelevancyFilters": [],
+    '    "filters": {},
+    '    "offset": 0,
+    '    "limit": 50,
+    '    "search": "",
+    '    "orderBy": {
+    '      "direction": "DESC",
+    '      "field": "Info"
+    '    }
+    '  }
+    '}
+    Public applicationFilters As List(Of String)
+    Public irrelevancyFilters As List(Of String)
+    Public offset As Long
+    Public limit As Long
+    Public search As String
+    Public orderBy As orderByClause
+
+
+    Public Sub New(offS As Long)
+        offset = offS
+        limit = 500
+        search = ""
+
+        orderBy = New orderByClause
+        irrelevancyFilters = New List(Of String)
+        applicationFilters = New List(Of String)
+        applicationFilters.Add("Irrelevant")
+
+        orderBy.direction = "DESC"
+        orderBy.field = "Info"
+    End Sub
+
+
+End Class
+Public Class orderByClause
+    Public direction As String
+    Public field As String
+End Class
 Public Class appsRequestVARS
     '    {"getApplicationsInput": {
     '  "offset": 0,
@@ -675,6 +899,11 @@ Public Class appsRequestVARS
     End Sub
 End Class
 
+Public Class requestConditions
+    Public condition As String
+    Public fieldName As String
+    Public values As List(Of String)
+End Class
 Public Class issueRequestVARS
     '    {"getIssuesInput": {"owners": [],"offset": 0,"limit": 1000,"filters": {"criticality": ["Critical","High","Medium","Low","Info"]}
     '    ',"sort": {"fields": ["Severity"],"order": ["DESC"]},"dateRange": {"from": 1684993734665,"to": 1685598534665}},
@@ -684,6 +913,7 @@ Public Class issueRequestVARS
     Public sort As irvSORT
     Public dateRange As irvDR
     Public isDemo As Boolean
+
 
     Public Sub New()
         isDemo = True
@@ -719,6 +949,54 @@ Public Class issueRequestVARS
     End Sub
 End Class
 
+Public Class oxConnectors
+    '  "getConnectorsByFamily" [
+    '  {
+    '    "family": "SourceControl",
+    '    "familyDisplayName": "Source Control",
+    '    "connectors": [
+    '      {
+    '        "connector": {
+    '          "id": "1",
+    '          "name": "GitHub",
+    '          "displayName": "GitHub",
+    '          "description": "GitHub, Inc. is a provider of Internet hosting for software development and version control using Git. It offers the distributed version control and source code management functionality of Git, plus its own features",
+    '          "credentialsTypes": [
+    '            "GitHubApp",
+    '            "IdentityProvider",
+    '            "Token"
+    '          ]
+    '        }
+    '      },
+
+    Public getConnectorsByFamily As List(Of connectorFamily)
+    Public Sub New()
+        getConnectorsByFamily = New List(Of connectorFamily)
+    End Sub
+End Class
+Public Class connectorFamily
+    Public family As String
+    Public familyDisplayName As String
+    Public connectors As List(Of oxConnector)
+End Class
+Public Class oxConnector
+    Public connector As oxConnection
+    Public Sub New()
+        connector = New oxConnection
+    End Sub
+End Class
+Public Class oxConnection
+    Public id As String
+    Public name As String
+    Public displayName As String
+    Public description As String
+    Public isConfigured? As Boolean
+    Public credentialsTypes As List(Of String)
+    Public Sub New()
+        credentialsTypes = New List(Of String)
+        isConfigured = False
+    End Sub
+End Class
 Public Class editTagsReq
     Public [input] As editTagsRequestVARS
 End Class
@@ -761,6 +1039,7 @@ Public Class irvGII
     Public offset As Integer
     Public limit As Integer
     Public filters As irvFIL
+    Public conditionalFilters As List(Of requestConditions)
 End Class
 Public Class irvFIL
     Public criticality As List(Of String)

@@ -757,7 +757,11 @@ errorCatch:
     End Function
 
     Public Function streamReaderTxt(fileN$) As String
+        'Console.WriteLine("New Streamreader - ")
+        GoTo tryThis
+
         streamReaderTxt = ""
+
         Dim fS As New FileStream(fileN, FileMode.Open, FileAccess.Read)
         Dim sR As New StreamReader(fS)
 
@@ -767,6 +771,12 @@ errorCatch:
 
         sR = Nothing
         fS = Nothing
+        Exit Function
+
+tryThis:
+        'this is so much more ridiculously fast
+        streamReaderTxt = System.IO.File.ReadAllText(fileN)
+
     End Function
     Public Function cleanJSONright(json$) As String
         ' sometimes additional info 'stacked' onto json array.. doing this rather than customizing objects.. back up to ]

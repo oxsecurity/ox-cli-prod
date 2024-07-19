@@ -18,7 +18,7 @@ Module Program
     Public OX As oxWrapper
 
     Public currOffset = 0
-    Public issueLimit = 1000
+    Public issueLimit = 10000
 
     Public ogDir$
     Public pyDir$
@@ -37,12 +37,14 @@ Module Program
 
     '    Public Sub loadJSONissues() As 
 
-    Sub Main(args As String())
+    Function Main(args As String()) As Integer
+        ' Environment.ExitCode = 1
         If UBound(args) = -1 Then
             Console.WriteLine("You must enter a command. Try 'help'.")
             End
         End If
-
+        '        Main = 1
+        '       Console.WriteLine("Returning Exit Code " + Environment.ExitCode.ToString)
         Dim actioN$ = args(0)
         Console.WriteLine("ACTION: " + actioN)
 
@@ -87,8 +89,21 @@ Module Program
                 Console.WriteLine(fLine("", "[OPTIONAL] --file (output filename)"))
                 Console.WriteLine("-----------------")
 
+                Console.WriteLine(fLine("getconnectors", "prints all connectors to screen or CSV"))
+                Console.WriteLine(fLine("", "[OPTIONAL] --FILE (name of CSV file to create)"))
+                Console.WriteLine("-----------------")
+
+
                 Console.WriteLine(fLine("apptagsxls", "retrieves all APP TAGS and creates pivot Excel doc"))
                 Console.WriteLine(fLine("", "[REQUIRED] --FILE (name of XLS file to create)"))
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("getapps", "prints all irrelevant apps to screen or CSV"))
+                Console.WriteLine(fLine("", "[OPTIONAL] --FILE (name of CSV file to create)"))
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("getirrelevantapps", "prints all irrelevant apps to screen or CSV"))
+                Console.WriteLine(fLine("", "[OPTIONAL] --FILE (name of CSV file to create)"))
                 Console.WriteLine("-----------------")
 
                 Console.WriteLine(fLine("issuesdetailed", "retrieves all issue data and creates pivot Excel doc"))
@@ -113,6 +128,179 @@ Module Program
                 Console.WriteLine(fLine("", "[TEST]     --MATCH (submit test app name) - will confirm string and/or regex match without looping through apps"))
                 Console.WriteLine("=======================================================================================================================================================")
                 End
+
+
+            Case "gatecheck"
+                'Dim appId$ = argValue("appid", args)
+                Dim appName$ = argValue("appname", args)
+                Dim failCode$ = argValue("failcode", args)
+
+                Console.WriteLine(vbCrLf + "OX SECURITY GATE CHECK - WILL LOOK FOR RESULTS FROM RECENT SCAN FOR --appname SPECIFIED" + vbCrLf)
+
+                If appName = "" Then
+                    Console.WriteLine("You must specify --appname")
+                    Environment.ExitCode = 1
+                    End
+                End If
+                Dim allIssues As List(Of issuesMedium) = New List(Of issuesMedium)
+
+                Console.WriteLine("Getting all issues High Severity & above for " + appName)
+                If failCode = "" Then
+                    Console.WriteLine("No --failcode entered - this action will log vulnerabilities only")
+                Else
+                    Console.WriteLine("--failcode provided - this action will return an exit code of " + failCode + " if issues exist in recent scheduled scan")
+                End If
+
+                'Console.WriteLine(vbCrLf)
+
+                Dim numFiles As Integer = getAllIssues(, "getIssuesMedium",, appName)
+                'Console.WriteLine(vbCrLf + vbCrLf + "Pulling " + numFiles.ToString + " files")
+                allIssues = buildMediumIssues("getIssuesMedium.json", numFiles)
+                'Console.WriteLine("# of issues: " + allIssues.Count.ToString)
+
+                Call consoleDump(allIssues)
+
+                If Len(failCode) And allIssues.Count > 0 Then
+                    If Val(failCode) > 0 Then
+                        Environment.ExitCode = Val(failCode)
+                        Console.WriteLine(vbCrLf + "ERROR: EXIT CODE=" + failCode + " for " + allIssues.Count.ToString + " vulnerabilities")
+                    End If
+                End If
+                End
+
+
+            Case "getirrelevantapps"
+                Dim allApps As List(Of oxAppIrrelevant) = New List(Of oxAppIrrelevant)
+                allApps = getAppListIrrelevant()
+                Console.WriteLine("# Of Apps: " + allApps.Count.ToString)
+                Dim fileN$ = argValue("file", args)
+
+                Dim csV$ = ""
+
+                For Each I In allApps
+                    Dim lDate$ = ""
+                    Dim aName$ = ""
+                    Dim iReason$ = ""
+
+                    aName = I.appName + " [" + I.appId + "]"
+                    lDate = CStr(jStoDate(CLng(I.lastCodeChange)))
+                    For Each R In I.irrelevantReasons
+                        iReason += R + ","
+                    Next
+                    iReason = Mid(iReason, 1, Len(iReason) - 1)
+
+                    If fileN = "" Then
+                        Console.WriteLine(aName + spaces(60 - Len(aName)) + lDate + spaces(25 - Len(lDate)) + iReason)
+                    Else
+                        csV += qT(I.appName) + "," + I.appId + "," + lDate + "," + iReason + vbCrLf
+                    End If
+                Next
+
+                If Len(csV) Then
+                    safeKILL(fileN)
+                    Dim hdR$ = "APP_NAME,APP_ID,LAST_CHANGE,IRRELEVANT_REASON" + vbCrLf
+                    streamWriterTxt(fileN, hdR + csV)
+                    Console.WriteLine("File written to " + fileN)
+                End If
+                End
+
+            Case "getapps"
+                Dim allApps As List(Of oxAppshort) = getAppListShort()
+                Console.WriteLine("# of Applications: " + allApps.Count.ToString)
+
+                Dim fileN$ = argValue("file", args)
+
+                Dim csV$ = ""
+
+                Dim maxNumTags As Integer = 0
+
+                For Each I In allApps
+                    Dim aName$ = ""
+                    Dim tagCsv$ = ""
+
+                    aName = I.appName + " [" + I.appId + "]"
+                    For Each R In I.tags
+                        tagCsv$ += R.displayName + ","
+                    Next
+                    If I.tags.Count > maxNumTags Then maxNumTags = I.tags.Count
+
+                    tagCsv$ = Mid(tagCsv$, 1, Len(tagCsv$) - 1)
+
+                    If fileN = "" Then
+                        Console.WriteLine(aName + spaces(60 - Len(aName)) + I.tags.Count.ToString + spaces(10) + tagCsv$)
+                    Else
+                        csV += I.appName + "," + I.appId + "," + tagCsv + vbCrLf
+                    End If
+                Next
+
+                If Len(csV) Then
+                    Dim hdR$ = "APP_NAME,APP_ID,"
+                    Dim K As Integer
+
+                    For k = 1 To maxNumTags
+                        hdR += "TAG_" + K.ToString + ","
+                    Next
+                    hdR = Mid(hdR, 1, Len(hdR) - 1) + vbCrLf
+                    Console.WriteLine("HEADERS:" + vbCrLf + hdR)
+
+                    safeKILL(fileN)
+                    streamWriterTxt(fileN, hdR + csV)
+                    Console.WriteLine("File written to " + fileN)
+
+                End If
+
+                End
+
+
+
+            Case "getconnectors"
+                Dim allConnections As List(Of connectorFamily) = New List(Of connectorFamily)
+
+                allConnections = getOxConnectors()
+
+                Dim isConfig As Boolean = False
+                If LCase(argValue("configonly", args)) = "true" Then isConfig = True
+                Dim fileN$ = argValue("file", args)
+                Dim csV$ = ""
+                Dim cLine$ = ""
+
+                cLine = qT("FAMILY") + "," + qT("NAME") + vbCrLf ' + "," + qT("DESCRIPTION") + "," + qT("CREDENTIAL_TYPES") + vbCrLf
+                Console.WriteLine(cLine)
+
+                For Each F In allConnections
+                    Dim aLine$ = ""
+                    For Each CONN In F.connectors
+                        If isConfig = True And CONN.connector.isConfigured = False Then GoTo skip
+
+                        aLine = qT(F.familyDisplayName) + ","
+                        Dim C As oxConnection = CONN.connector
+                        aLine += qT(C.displayName) ' + "," + qT(C.description)
+                        'Dim creD$ = ""
+
+                        'If C.credentialsTypes IsNot Nothing Then
+                        '    If C.credentialsTypes.Count Then
+                        '        For Each CT In C.credentialsTypes
+                        '            creD += CT + ","
+                        '        Next
+                        '    End If
+                        'End If
+
+                        'aLine += "," + qT(creD) ' + vbCrLf
+
+                        Console.WriteLine(aLine)
+                        cLine += aLine + vbCrLf
+skip:
+                    Next
+                    'cLine += aLine + vbCrLf
+                    'Console.WriteLine(aLine)
+                Next
+
+
+                If Len(fileN) Then streamWriterTxt(fileN, cLine)
+                End
+
+
+
             Case "checkme"
                 ' removed folder structure due to nuances between different versions of *NIX (tested good on MacOS & Windows only, failed on DEBIAN BOOKWORM and BULLSEYE)
 
@@ -357,7 +545,7 @@ gotCached:
                     If IO.File.Exists(Path.Combine(cacheDir, cFile)) = True Then
                         ' Console.WriteLine("Found Issue cached -> " + cFile)
                         numCache += 1
-                        GoTo skipThisOne
+                        GoTo skipthisone
                     End If
 
                     Call setIssueReqVars(I.issueId)
@@ -367,7 +555,7 @@ tryAgain:
                     If newJson = "ERROR" Then
                         Console.WriteLine("Trying again in 15 minutes")
                         Sleep(900000)
-                        GoTo tryagain
+                        GoTo tryAgain
                     End If
 
                     'Console.WriteLine(newJson)
@@ -501,7 +689,7 @@ skipThatOne:
 
 
 
-    End Sub
+    End Function
 
 
     Public Function addTag(tagName$, Optional ByVal dName$ = "", Optional ByVal tType$ = "simple") As String
@@ -732,7 +920,54 @@ skipThatOne:
         '  getAppListShort = OX.getAppInfoShort(jsoN)
     End Function
 
-    Public Function getAllIssues(Optional ByVal doShortIssues As Boolean = False, Optional ByVal differentCall$ = "", Optional ByVal diffOffset As Long = 0) As Integer
+    Public Function getOxConnectors() As List(Of connectorFamily)
+        getOxConnectors = New List(Of connectorFamily)
+
+        Dim jsoN$ = setUpAPICall("getConnectors",, True)
+        getOxConnectors = OX.getConnectionsFromJson(jsoN)
+
+    End Function
+
+    Public Function getAppListIrrelevant() As List(Of oxAppIrrelevant)
+        getAppListIrrelevant = New List(Of oxAppIrrelevant)
+        '        Dim jsoN$ = ""
+        '        jsoN = setUpAPICall("getAppsShort",, True)
+
+        Call getAllIssues(, "getAppsIrrelevant", 500)
+
+        'Dim allIssues As List(Of issueS) = New List(Of issueS)
+
+        Dim currFile As Integer
+        Dim cFile$
+        Dim fileN$ = "getAppsIrrelevant.json"
+
+        For currFile = 0 To numResponseFiles - 1
+            cFile = Replace(fileN, ".json", currFile.ToString + ".json")
+            Dim tempApps As List(Of oxAppIrrelevant) = New List(Of oxAppIrrelevant)
+            Console.WriteLine("Deserializing JSON " + cFile)
+            tempApps = OX.getAppIrrelevant(streamReaderTxt(cFile))
+
+            If numResponseFiles = 0 Then
+                getAppListIrrelevant = tempApps
+            Else
+                ' is there a better way? test 
+                For Each T In tempApps
+                    getAppListIrrelevant.Add(T)
+                Next
+            End If
+        Next
+
+
+        Console.WriteLine("Total # of files (500 apps per file): " + (numResponseFiles - 1).ToString)
+        Console.WriteLine("# of Apps: " + getAppListIrrelevant.Count.ToString)
+
+
+
+        '  getAppListShort = OX.getAppInfoShort(jsoN)
+    End Function
+
+
+    Public Function getAllIssues(Optional ByVal doShortIssues As Boolean = False, Optional ByVal differentCall$ = "", Optional ByVal diffOffset As Long = 0, Optional ByVal appName$ = "") As Integer
         numResponseFiles = 0
 
         Dim apiCall$ = "getIssues"
@@ -753,6 +988,11 @@ skipThatOne:
                 Call setGetIssuesVars(0, doShortIssues)
             Case "getAppsShort"
                 Call setGetAppsShortVars(0) ', doShortIssues)
+            Case "getAppsIrrelevant"
+                Call setGetAppsIrrelevantVars(0) ', doShortIssues)
+            Case "getIssuesMedium"
+                Call setGetIssuesMediumVars(0, appName)
+
         End Select
 
         Console.WriteLine("Pulling first page > " + fileName + " > " + Replace(fileName, ".json", "0.json"))
@@ -765,8 +1005,9 @@ skipThatOne:
                 respIssue = OX.getListIssues(Replace(fileName, ".json", "0.json"))
                 With respIssue
                     Console.WriteLine("Total Issues: " + .totalIssues.ToString)
-                    'Console.WriteLine("Filtered Issues: " + .totalFilteredIssues.ToString)
-                    'Console.WriteLine("Offset: " + .offset.ToString)
+                    Console.WriteLine("Filtered Issues: " + .totalFilteredIssues.ToString)
+                    Console.WriteLine("Offset: " + .offset.ToString)
+                    If issueLimit <> .offset Then issueLimit = .offset
                 End With
 
                 numResponseFiles = 0
@@ -783,22 +1024,82 @@ skipThatOne:
 
                 Call setGetIssuesVars(0, doShortIssues)
 
-            Case "getAppsShort"
-                Dim appPageLimit As Long = 50
-                Dim respApps As listApps = New listApps
-                respApps = OX.getListAppsPaging(Replace(fileName, ".json", "0.json"))
-                With respApps
+            Case "getAppsIrrelevant"
+                Dim appPageLimit As Long = 1000
+                Dim respIssue As listApps = New listApps
+                respIssue = OX.getListAppsPaging(Replace(fileName, ".json", "0.json"))
+                With respIssue
                     Console.WriteLine("Total: " + .total.ToString)
                     ' Console.WriteLine("Total Filtered Apps: " + .totalFilteredApps.ToString)
                     Console.WriteLine("Total Irrelevant: " + .totalIrrelevantApps.ToString)
-                    'Console.WriteLine("Offset: " + .offset.ToString)
-                    appPageLimit = .offset
+                    Console.WriteLine("Offset: " + .offset.ToString)
+                    If appPageLimit <> .offset Then appPageLimit = .offset
                 End With
 
                 numResponseFiles = 0
                 'this was the first file
 
-                Dim issReq As Long = numIssueRequests(respApps.total, appPageLimit) 'hardcoding!! UGH
+                Dim issReq As Long = numIssueRequests(respIssue.total, appPageLimit)
+                'Console.WriteLine("Limit = " + appPageLimit.ToString)
+
+                Do Until numResponseFiles = issReq
+                    numResponseFiles += 1
+                    Console.WriteLine("Calling OXAPI: " + numResponseFiles.ToString + " OF " + issReq.ToString + " requests")
+                    ' hardcoding
+
+                    Call setGetAppsIrrelevantVars(appPageLimit * numResponseFiles)
+                    Call setUpAPICall(apiCall, Replace(fileName, ".json", numResponseFiles.ToString + ".json"))
+                    goUpALine()
+                Loop
+
+                Call setGetAppsIrrelevantVars(0) ', doShortIssues)
+
+
+
+            Case "getIssuesMedium"
+                Dim respIssue As listIssues = New listIssues
+                respIssue = OX.getListIssues(Replace(fileName, ".json", "0.json"))
+
+                With respIssue
+                    'Console.WriteLine("Total Issues: " + .totalIssues.ToString)
+                    'Console.WriteLine("Filtered Issues: " + .totalFilteredIssues.ToString)
+                    'Console.WriteLine("Offset: " + .offset.ToString)
+                    If issueLimit <> .offset Then issueLimit = .offset
+                End With
+
+                numResponseFiles = 1
+                'this was the first file
+
+                Do Until numResponseFiles = numIssueRequests(respIssue.totalFilteredIssues)
+                    numResponseFiles += 1
+                    'Console.WriteLine("Calling OXAPI: " + numResponseFiles.ToString + " OF " + numIssueRequests(respIssue.totalFilteredIssues).ToString + " requests")
+                    Call setGetIssuesMediumVars(issueLimit * numResponseFiles, appName) ', doShortIssues)
+                    Call setUpAPICall(apiCall, Replace(fileName, ".json", numResponseFiles.ToString + ".json"))
+                    ' goUpALine()
+
+                Loop
+
+                Call setGetIssuesMediumVars(0, appName) ', doShortIssues)
+
+
+            Case "getAppsShort"
+                Dim appPageLimit As Long = 1000
+                Dim respApps As listApps = New listApps
+                respApps = OX.getListAppsPaging(Replace(fileName, ".json", "0.json"))
+                'Console.WriteLine("Limit = " + appPageLimit.ToString)
+                With respApps
+                    Console.WriteLine("Total: " + .total.ToString)
+                    ' Console.WriteLine("Total Filtered Apps: " + .totalFilteredApps.ToString)
+                    Console.WriteLine("Total Irrelevant: " + .totalIrrelevantApps.ToString)
+                    'Console.WriteLine("Offset: " + .offset.ToString)
+                    If appPageLimit <> .offset Then appPageLimit = .offset
+                End With
+
+                numResponseFiles = 0
+                'this was the first file
+
+                Dim issReq As Long = numIssueRequests(respApps.total, appPageLimit)
+                'Console.WriteLine("Limit = " + appPageLimit.ToString)
 
                 Do Until numResponseFiles = issReq
                     numResponseFiles += 1
@@ -806,6 +1107,7 @@ skipThatOne:
                     ' hardcoding
 
                     Call setGetAppsShortVars(appPageLimit * numResponseFiles)
+                    Console.WriteLine("OFFSET:" + (appPageLimit * numResponseFiles).ToString)
                     Call setUpAPICall(apiCall, Replace(fileName, ".json", numResponseFiles.ToString + ".json"))
                     goUpALine()
 
@@ -839,14 +1141,27 @@ skipThatOne:
     Public Sub setGetAppsShortVars(offSet As Integer)
         Dim toFileN$ = "getAppsShort.variables.json"
         Dim appReqVar As appsRequestVARS = New appsRequestVARS(offSet)
+        appReqVar.offset = offSet
         Dim newJson$ = ""
         ' this is sloppy pls figure out why you did this, this way
         OX = New oxWrapper("", "")
         newJson = OX.jsonGetAppsVars(appReqVar)
+        newJson = "{" + Chr(34) + "getApplicationsInput" + Chr(34) + ":" + newJson + "}"
+        Console.WriteLine(newJson)
+
         Call saveJSONtoFile(newJson, Path.Combine(pyDir, toFileN))
 
     End Sub
+    Public Sub setGetAppsIrrelevantVars(offSet As Integer)
+        Dim toFileN$ = "getAppsIrrelevant.variables.json"
+        Dim appReqVar As appsIrrelevantRequestVARS = New appsIrrelevantRequestVARS(offSet)
+        Dim newJson$ = ""
+        ' this is sloppy pls figure out why you did this, this way
+        OX = New oxWrapper("", "")
+        newJson = OX.jsonGetIrrelevantAppsVars(appReqVar)
+        Call saveJSONtoFile(newJson, Path.Combine(pyDir, toFileN))
 
+    End Sub
 
     Public Sub setGetIssuesVars(offSet As Integer, Optional ByVal doIssuesShort As Boolean = False)
         Dim toFileN$ = "getIssues.variables.json"
@@ -865,7 +1180,40 @@ skipThatOne:
         Call saveJSONtoFile(newJson, Path.Combine(pyDir, toFileN))
 
     End Sub
+    Public Sub setGetIssuesMediumVars(offSet As Integer, Optional ByVal appName$ = "") ', Optional ByVal doIssuesShort As Boolean = False)
+        Dim toFileN$ = "getIssuesMedium.variables.json"
+        'If doIssuesShort = True Then toFileN = "getIssuesShort.variables.json"
+        Dim newIssueVar As issueRequestVARS = New issueRequestVARS
+        With newIssueVar
 
+            .dateRange.from = 1
+            .dateRange.to = dateToJS(Now)
+            .getIssuesInput.limit = 1000 '10000 results in 12MB file and some timeouts
+            .getIssuesInput.offset = offSet
+            .getIssuesInput.filters.criticality = New List(Of String)
+            .getIssuesInput.filters.criticality.Add("Appoxalypse")
+            .getIssuesInput.filters.criticality.Add("Critical")
+            .getIssuesInput.filters.criticality.Add("High")
+            '.getIssuesInput.filters.criticality.Add("Medium")
+            '.getIssuesInput.filters.criticality.Add("Critical") ',"High","Medium","Low","Info"
+            If Len(appName) > 0 Then
+                .getIssuesInput.conditionalFilters = New List(Of requestConditions)
+                Dim rQ As requestConditions = New requestConditions
+                rQ.condition = "OR"
+                rQ.fieldName = "apps"
+                rQ.values = New List(Of String)
+                rQ.values.Add(appName)
+                .getIssuesInput.conditionalFilters.Add(rQ)
+                '                .getIssuesInput.
+            End If
+        End With
+        Dim newJson$ = ""
+        ' this is sloppy pls figure out why you did this, this way
+        OX = New oxWrapper("", "")
+        newJson = OX.jsonGetIssuesVars(newIssueVar)
+        Call saveJSONtoFile(newJson, Path.Combine(pyDir, toFileN))
+
+    End Sub
     Public Sub setEditTagsVarsRequests(evReq As editTagsRequestVARS)
         Dim newJson$ = ""
         ' more sloppy - make OX global for main
@@ -979,6 +1327,35 @@ skipThatOne:
         Console.WriteLine("# of Issues: " + allIssues.Count.ToString)
         Return allIssues
     End Function
+
+    Public Function buildMediumIssues(fileN$, numFiles As Integer) As List(Of issuesMedium)
+        Dim allIssues As List(Of issuesMedium) = New List(Of issuesMedium)
+
+        Dim currFile As Integer
+        Dim cFile$
+
+        For currFile = 0 To numFiles - 1
+            cFile = Replace(fileN, ".json", currFile.ToString + ".json")
+            Dim tempIssues As List(Of issuesMedium) = New List(Of issuesMedium)
+            'Console.WriteLine("Deserializing JSON " + cFile)
+            tempIssues = OX.returnMediumIssues(streamReaderTxt(cFile))
+
+            If numFiles = 0 Then
+                allIssues = tempIssues
+            Else
+                ' is there a better way? test 
+                For Each T In tempIssues
+                    allIssues.Add(T)
+                Next
+            End If
+        Next
+
+
+        Console.WriteLine("Total # of files (" + issueLimit.ToString + " issues per file): " + (numFiles).ToString)
+        Console.WriteLine("# of Issues: " + allIssues.Count.ToString)
+        Return allIssues
+    End Function
+
 
     Public Function buildShortIssues(fileN$, numFiles As Integer) As List(Of issueS)
         Dim allIssues As List(Of issueS) = New List(Of issueS)
@@ -1507,6 +1884,64 @@ errorcatch:
         Next
         ndxFilenames = -1
     End Function
+
+    Public Sub consoleDump(allIssues As List(Of issuesMedium))
+        If allIssues.Count = 0 Then Exit Sub
+
+        Dim iC As issuesClass = New issuesClass(allIssues)
+
+        Dim nStr$ = ""
+        With iC
+            Dim numS As Integer = .numSev("Appoxalypse")
+            If numS Then nStr += numS.ToString + " Appoxalypse,"
+            numS = .numSev("Critical")
+            If numS Then nStr += numS.ToString + " Critical,"
+            numS = .numSev("High")
+            If numS Then nStr += numS.ToString + " High,"
+        End With
+
+        If Len(nStr) > 0 Then nStr = Mid(nStr, 1, Len(nStr) - 1)
+        Dim lI$ = "======================================================================================================"
+
+        Console.WriteLine(vbCrLf + "ISSUE SUMMARY: " + nStr + vbCrLf + iC.sumCats + vbCrLf + lI)
+
+        Dim K As Integer
+
+        For K = 0 To allIssues.Count - 1
+            Dim I As issuesMedium = allIssues(K)
+            Dim sTool$ = "OX"
+            Console.WriteLine("ISSUE NAME: " + I.name + "    OX SEV: " + I.severity + "   ORIG SEV: " + I.originalToolSeverity)
+            Console.WriteLine("CATEGORY: " + I.category.name + "       # OCCURRENCES: " + I.occurrences.ToString + "      " + sourceAndCommit(I.aggregations))
+            Console.WriteLine(I.mainTitle + vbCrLf + vbCrLf + "DESCRIPTION:" + vbCrLf + I.secondTitle)
+            Console.WriteLine(vbCrLf + "POLICY DESCRIPTION:" + vbCrLf + I.policy.detailedDescription + vbCrLf)
+            For Each S In I.severityChangedReason
+                Console.WriteLine(sfString(S))
+            Next
+            Console.WriteLine(lI + vbCrLf)
+
+            Next
+
+
+    End Sub
+    Public Function sfString(SF As sevFactor) As String
+        Dim pF$ = " "
+        If 100 * SF.changeNumber > 0 Then pF = "+"
+        If 100 * SF.changeNumber < 0 Then pF = "-"
+        Return pF + "[" + SF.changeCategory + "] " + SF.shortName
+
+    End Function
+    Public Function sourceAndCommit(A As oxAgg) As String
+        On Error Resume Next
+        Dim s$ = ""
+        Dim c$ = ""
+        s$ = A.items(0).source
+        c$ = A.items(0).commitBy
+
+        If s$ = "" Then s$ = "OX"
+        If c$ = "" Then c$ = "UNKNOWN"
+        sourceAndCommit = "SOURCE: " + s$ + "         COMMIT: " + c$
+    End Function
+
 
     Private Sub issueCacheLoader_ProgressChanged(sender As Object, e As ProgressChangedEventArgs) Handles issueCacheLoader.ProgressChanged
         Static oldP As Long = 0
