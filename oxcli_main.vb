@@ -11,6 +11,7 @@ Imports Newtonsoft.Json.Linq
 
 Imports System.ComponentModel
 Imports System.Threading
+Imports System.Runtime.Intrinsics.Arm
 
 
 Module Program
@@ -43,6 +44,8 @@ Module Program
             Console.WriteLine("You must enter a command. Try 'help'.")
             End
         End If
+
+        OX = New oxWrapper("", "")
         '        Main = 1
         '       Console.WriteLine("Returning Exit Code " + Environment.ExitCode.ToString)
         Dim actioN$ = args(0)
@@ -111,10 +114,10 @@ Module Program
                 Console.WriteLine(fLine("", "[OPTIONAL] --CACHE false  (by default, issues will be stored locally for caching)"))
                 Console.WriteLine("-----------------")
 
-                Console.WriteLine(fLine("issuesxls", "retrieves issues using python engine args and creates pivot Excel doc"))
+                Console.WriteLine(fLine("issuesxls", "retrieves all issues and creates pivot Excel doc"))
                 Console.WriteLine(fLine("", "[REQUIRED] --FILE (name of XLS file to create)"))
                 Console.WriteLine("-----------------")
-                Console.WriteLine(fLine("issuescsv", "retrieves issues Using python engine args And creates CSV doc"))
+                Console.WriteLine(fLine("issuescsv", "retrieves all issues and creates CSV doc"))
                 Console.WriteLine(fLine("", "[REQUIRED] --FILE (name Of CSV file To create)"))
                 Console.WriteLine("-----------------")
                 Console.WriteLine(fLine("addtag", "adds a New tag - name must be unique"))
@@ -126,9 +129,51 @@ Module Program
                 Console.WriteLine(fLine("", "[REQUIRED] --ADDTAG (tag displayname) OR --REMTAG (name)"))
                 Console.WriteLine(fLine("", "[OPTIONAL] --STR (app contains string), --REGEX (app matches regex), --COMMIT true (otherwise will only preview)"))
                 Console.WriteLine(fLine("", "[TEST]     --MATCH (submit test app name) - will confirm string and/or regex match without looping through apps"))
+                Console.WriteLine("-----------------")
+                Console.WriteLine(fLine("devdetail", "Takes in JSON of Dev Detail and presents 30/90/180 commit stats, plus creates pivot"))
+                Console.WriteLine(fLine("", "[REQUIRED] --INFILE (filename of JSON)"))
+                Console.WriteLine(fLine("", "[OPTIONAL] --FILE (Excel report filename)"))
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("tagfromxls", "Takes in EXCEL of columns with APP NAMES or APP IDs and their respective tag, adds TAGS to apps"))
+                Console.WriteLine(fLine("", "[REQUIRED] --FILE (XLS filename containing App and Tag info)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --APPNAME (Excel column representing App Name)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --TAG (Excel column representing TAG to apply)"))
+                Console.WriteLine(fLine("", "[OPTIONAL] --COMMIT (set to true to apply tags, otherwise test only)"))
+                Console.WriteLine("-----------------")
+
+
+                Console.WriteLine(fLine("gatecheck", "Checks most recent results for HIGH+ vulns across all sources based on recent scan"))
+                Console.WriteLine(fLine("", "[REQUIRED] --APPNAME (Name of application to check)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --APPNAME (Failcode to return eg 1 when HIGH+ encountered)"))
+
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("jsonfromxls", "Creates JSON used to define mapping of integration projects -> OX applications"))
+                Console.WriteLine(fLine("", "[REQUIRED] --XLS (XLS filename containing App and Tag info)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --FILE (Excel column representing App Name)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --APPNAME (Excel column representing App Name)"))
+                Console.WriteLine(fLine("", "[REQUIRED] --MAP (Excel column representing App Name)"))
+                Console.WriteLine(fLine("", "[REQUIRED] -- MAPTYPE (Type of integration eg blackduck)"))
+
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("readout", "Creates multiple documents for readout - requires MS Excel Powerpoint"))
+                Console.WriteLine(fLine("", "[REQUIRED] --FILE (Filenames of reports will begin with this prefix)"))
+
+                Console.WriteLine("-----------------")
+
+                Console.WriteLine(fLine("cvecsv", "Creates CSV of all CVEs"))
+                Console.WriteLine(fLine("", "[REQUIRED] --FILE (Filename of CSV output file)"))
+
+
                 Console.WriteLine("=======================================================================================================================================================")
                 End
 
+
+            Case "cvecsv"
+                Call cveList(args)
+                End
 
             Case "gatecheck"
                 'Dim appId$ = argValue("appid", args)
@@ -169,6 +214,17 @@ Module Program
                 End
 
 
+
+            Case "readout"
+
+                Call readoutSub(args)
+                End
+
+
+            Case "tagfromxls"
+                Call tagFromXLS(args)
+                End
+
             Case "getirrelevantapps"
                 Dim allApps As List(Of oxAppIrrelevant) = New List(Of oxAppIrrelevant)
                 allApps = getAppListIrrelevant()
@@ -177,6 +233,13 @@ Module Program
 
                 Dim csV$ = ""
 
+                Dim allReasons As Collection = New Collection
+                For Each I In allApps
+                    For Each R In I.irrelevantReasons
+                        If grpNDX(allReasons, R) = 0 Then allReasons.Add(R)
+                    Next
+                Next
+
                 For Each I In allApps
                     Dim lDate$ = ""
                     Dim aName$ = ""
@@ -184,25 +247,121 @@ Module Program
 
                     aName = I.appName + " [" + I.appId + "]"
                     lDate = CStr(jStoDate(CLng(I.lastCodeChange)))
-                    For Each R In I.irrelevantReasons
-                        iReason += R + ","
-                    Next
-                    iReason = Mid(iReason, 1, Len(iReason) - 1)
 
+                    For Each reasoN In allReasons
+                        Dim foundReason As Boolean = False
+                        For Each R In I.irrelevantReasons
+                            If reasoN = R Then foundReason = True
+                        Next
+                        If foundReason = True Then
+                            iReason += "1,"
+                        Else
+                            iReason += ","
+                        End If
+                    Next
+
+                    iReason = Mid(iReason, 1, Len(iReason) - 1)
                     If fileN = "" Then
                         Console.WriteLine(aName + spaces(60 - Len(aName)) + lDate + spaces(25 - Len(lDate)) + iReason)
                     Else
-                        csV += qT(I.appName) + "," + I.appId + "," + lDate + "," + iReason + vbCrLf
+                        csV += qT(I.appName) + "," + I.appId + "," + I.link + "," + lDate + "," + iReason + vbCrLf
                     End If
                 Next
-
                 If Len(csV) Then
                     safeKILL(fileN)
-                    Dim hdR$ = "APP_NAME,APP_ID,LAST_CHANGE,IRRELEVANT_REASON" + vbCrLf
+                    Dim hdR$ = "APP_NAME,APP_ID,LINK,LAST_CHANGE,"
+                    'IRRELEVANT_REASON" + vbCrLf
+                    For Each rsN In allReasons
+                        hdR += rsN + ","
+                    Next
+                    hdR = Mid(hdR, 1, Len(hdR) - 1) + vbCrLf
+                    safeKILL(fileN)
                     streamWriterTxt(fileN, hdR + csV)
                     Console.WriteLine("File written to " + fileN)
                 End If
                 End
+
+            Case "jsonfromxls"
+                Call createMappingJSON(args)
+                End
+
+
+            Case "strcompare"
+                Dim matcH As Single = 0
+                matcH = GetSimilarity("four score and seven years ago", "for scor and sevn yeres ago")
+                Console.WriteLine("Match = " + matcH.ToString)
+                End
+
+
+            Case "gitlab_tag_groups"
+                Dim reportOnly As Boolean = False
+                If LCase(argValue("reportonly", args)) = "true" Then reportOnly = True
+                Dim allApps As List(Of oxAppshort) = New List(Of oxAppshort)
+
+                If reportOnly = False Then
+                    allApps = getAppListShort()
+                    Console.WriteLine("# of Applications: " + allApps.Count.ToString)
+                End If
+
+                Dim fileJSON$ = argValue("glabjson", args)
+                Dim fileN$ = argValue("file", args)
+
+                Dim csV$ = ""
+                Dim glabRepos As List(Of glabRepo) = New List(Of glabRepo)
+                glabRepos = OX.returnGitLabRepos(fileJSON)
+
+                Console.WriteLine("# of OX Apps: " + allApps.Count.ToString)
+                Console.WriteLine("# of GitLab JSON Repos: " + glabRepos.Count.ToString)
+                'For Each gL In glabRepos
+                'Console.WriteLine(gL.name_with_namespace + "," + gL.name + "," + gL.namespace.name)
+                'Next
+                csV = "OX_ID,OX_APP_NAME,TAG,NS_KIND,WEB_URL,COUNT,EXCEPTION" + vbCrLf
+                For Each oApp In allApps
+                    If Mid(oApp.appName, 1, 1) = "*" Then GoTo skipFakeApp
+                    ' If InStr(oApp.appName, "terraform-okta-group") > 0 Then
+                    '     Dim K As Integer
+                    '     K = 12
+                    ' End If
+
+                    Dim cLine$ = qT(oApp.appId) + "," + qT(oApp.appName) + ","
+                    Dim numEntries As Integer = 0
+
+                    Dim groupsString$ = ""
+                    For Each gL In glabRepos
+                        ' old way, resulted in numerous instances of no match or multiple matches
+                        '   If oApp.appName = gL.name Then
+                        '   groupsString += gL.namespace.name + ","
+                        '   numEntries += 1
+                        '   End If
+
+                        ' new way
+                        ' match OX link to GL web url
+                        If oApp.link = gL.web_url Then
+                            groupsString += qT(gL.namespace.name) + "," + gL.namespace.kind + ","
+                            numEntries += 1
+                        End If
+                    Next
+                    'If Len(groupsString) Then
+                    '    If Mid(groupsString, Len(groupsString), 1) = "," Then groupsString = Mid(groupsString, 1, Len(groupsString) - 1)
+                    'End If
+                    If groupsString = "" Then groupsString = "N/A,N/A,"
+                    cLine += groupsString + qT(oApp.link) + ",1"
+                    If numEntries = 0 Then cLine += ",NO EXACT MATCH"
+                    If numEntries > 1 Then cLine += ",MORE THAN ONE MATCH"
+                    csV += cLine + vbCrLf
+                    Console.WriteLine(cLine)
+skipFakeApp:
+                Next
+                Call safeKILL(fileN)
+                Call streamWriterTxt(fileN, csV)
+
+                End
+
+
+            Case "devdetail"
+                Call devDetailXLS(args)
+                End
+
 
             Case "getapps"
                 Dim allApps As List(Of oxAppshort) = getAppListShort()
@@ -237,7 +396,7 @@ Module Program
                     Dim hdR$ = "APP_NAME,APP_ID,"
                     Dim K As Integer
 
-                    For k = 1 To maxNumTags
+                    For K = 1 To maxNumTags
                         hdR += "TAG_" + K.ToString + ","
                     Next
                     hdR = Mid(hdR, 1, Len(hdR) - 1) + vbCrLf
@@ -500,6 +659,7 @@ skip:
                 allApps = getAppListShort()
                 Console.WriteLine("# of Applications: " + allApps.Count.ToString)
                 Call appTagRPT(allApps, toFilename)
+                End
 
             Case "issuesdetailed"
                 ' If osType <> "Windows" Then
@@ -656,7 +816,7 @@ skipThatOne:
                 '                    Call processCache()
                 '                End If
 
-                Call issueDetailRpt(issuesCache, toFilename)
+                ' Call issueDetailRpt(issuesCache, toFilename)
 
                 End
 
@@ -699,6 +859,7 @@ skipThatOne:
 
         Console.WriteLine("Adding tag:")
         Call setAddTagVars(tagName, dName, tType)
+        Thread.Sleep(1000)
         Dim jSon$ = setUpAPICall("addTag",, True)
         addTag = OX.getTagId(jSon)
         If addTag = "" Then
@@ -865,6 +1026,298 @@ skipThatOne:
         End
     End Sub
 
+    Public Sub cveList(args() As String)
+        Dim rFiles As Integer = 0
+        Dim allIssues = New List(Of issueS)
+
+        Dim done As Collection = New Collection
+        done = CSVFiletoCOLL(Path.Combine(ogDir, "issues_sofar.txt"))
+
+        Console.WriteLine(done.Count.ToString + " issues already cached")
+
+        'Call safeKILL(Path.Combine(ogDir, "issues_sofar.txt"))
+
+        Dim fileN$ = argValue("file", args)
+        If fileN = "" Then
+            Console.WriteLine("You must provide the filename of the CSV to write --FILE (csv filename)")
+            Exit Sub
+            '        Else
+            '           Call safeKILL(fileN)
+        End If
+
+        Console.WriteLine("Getting issue list")
+
+        If argValue("numfiles", args) <> "" Then
+            rFiles = Val(argValue("numfiles", args))
+        End If
+
+        If rFiles = 0 Then
+            Call getAllIssues(True)
+        Else
+            numResponseFiles = rFiles
+        End If
+
+        'Console.WriteLine("# resp files: " + (numResponseFiles).ToString)
+        allIssues = buildIssues("getIssuesShort.json", numResponseFiles)
+
+        Dim csV$ = ""
+        Dim totalNum As Integer = 0
+
+        For Each i In allIssues
+            If i.category.name <> "Open Source Security" Then GoTo countMe
+            totalNum += 1
+countMe:
+        Next
+
+        Dim currCtr As Integer = 1
+        For Each i In allIssues
+            csV = ""
+            ' call single issue for all cves/vulns
+            If i.category.name <> "Open Source Security" Then GoTo skipIt
+
+            If grpNDX(done, i.issueId) > 0 Then
+                Console.WriteLine("Already have " + i.issueId)
+                currCtr += 1
+                GoTo skipIt
+            End If
+
+            Call setIssueReqVars(i.issueId, "getSCAvulns.variables.json")
+            Dim jsoN$ = ""
+
+
+            Console.WriteLine("[" + currCtr.ToString + "/" + totalNum.ToString + "] " + i.app.name + " | " + i.issueId)
+            jsoN = setUpAPICall("getSCAvulns",, True)
+            currCtr += 1
+            'Console.WriteLine(jsoN)
+
+            Dim issueVulns As scaCVE = New scaCVE
+            Dim nD As JObject = JObject.Parse(jsoN)
+            issueVulns = JsonConvert.DeserializeObject(Of scaCVE)(nD.SelectToken("data").SelectToken("getSingleIssueInfo").ToString)
+
+            For Each V In issueVulns.scaVulnerabilities
+                Dim parentLib$ = ""
+
+                If IsNothing(issueVulns.sbom) = False Then
+                    parentLib = issueVulns.sbom.libId
+                Else
+                    parentLib = V.libName + "|" + V.libVersion
+                End If
+
+                Dim a$ = qT(i.app.name) + "," + qT(parentLib) + "," + qT(V.libName + "@" + V.libVersion) + "," + qT(V.cve)
+                '                Console.WriteLine(a)
+                csV += a + vbCrLf
+            Next
+
+            Call streamWriterTxt(fileN, csV)
+            Call streamWriterTxt(Path.Combine(ogDir, "issues_sofar.txt"), i.issueId)
+skipIt:
+        Next
+
+
+    End Sub
+
+    Public Sub readoutSub(args() As String)
+        Dim allIssues = New List(Of issueS)
+        Dim allApps As List(Of oxAppshort) = New List(Of oxAppshort)
+
+        allApps = getAppListShort()
+        Console.WriteLine("# of Applications: " + allApps.Count.ToString)
+
+        ' if cached.. skip API calls by specifying # of response files in dir
+        Dim rFiles As Integer = 0
+        If argValue("numfiles", args) <> "" Then
+            rFiles = Val(argValue("numfiles", args))
+        End If
+
+        If rFiles = 0 Then
+            Call getAllIssues(True)
+        Else
+            numResponseFiles = rFiles
+        End If
+        'Console.WriteLine("# resp files: " + (numResponseFiles).ToString)
+        allIssues = buildIssues("getIssuesShort.json", numResponseFiles)
+
+        'Console.WriteLine("# of issues: " + allIssues.Count.ToString)
+        With allIssues(0)
+            Console.WriteLine(.severityChangedReason.Count.ToString)
+        End With
+
+        Console.WriteLine("Analyzing Severity Factors..")
+
+        Dim allSFs As List(Of sevF) = New List(Of sevF)
+        Dim numR As Integer = 0
+        Dim numE As Integer = 0
+        Dim numD As Integer = 0
+
+        For Each I In allIssues
+            For Each S In I.severityChangedReason
+                Dim sNdx = getSFndx(allSFs, S.shortName)
+                If sNdx = -1 Then
+                    'new
+                    Dim SF As sevF = New sevF
+                    SF.shortName = S.shortName
+                    SF.numOccurrences = 1
+                    SF.changeCategory = S.changeCategory
+                    SF.changeNumber = S.changeNumber
+                    allSFs.Add(SF)
+                Else
+                    allSFs(sNdx).numOccurrences += 1
+                End If
+                Select Case S.changeCategory
+                    Case "Damage"
+                        numD += 1
+                    Case "Reachable"
+                        numR += 1
+                    Case "Exploitable"
+                        numE += 1
+                End Select
+            Next
+        Next
+
+        Console.WriteLine("# unique Severity Factors     : " + allSFs.Count.ToString)
+        Console.WriteLine("# Severity Factors applied    : " + (numR + numE + numD).ToString)
+        Console.WriteLine("# Reachable/Exploitable/Damage: " + numR.ToString + "/" + numE.ToString + "/" + numD.ToString)
+        Console.WriteLine(vbCrLf + "Making reports..")
+
+        Dim fileN$ = argValue("file", args)
+
+        If Len(fileN) Then
+            'safeKILL(fileN)
+            Call issueDetailRpt(allIssues, fileN$)
+            Call appTagRPT(allApps, Path.Combine(ogDir, fileN + "_tags.xlsx"))
+            Call sfRoiRPT(allSFs, numR, numE, numD, Path.Combine(ogDir, fileN + "_SFroi.xlsx"))
+
+        End If
+
+    End Sub
+
+    Public Sub tagFromXLS(args() As String)
+
+        Dim fileN$ = argValue("file", args)
+
+        Dim commitChanges As Boolean = False
+        If LCase(argValue("commit", args)) = "true" Then commitChanges = True
+
+        If fileN = "" Then
+            Console.WriteLine("You must provide the filename of the Excel file to read from using --FILE")
+            End
+        Else
+            If IO.File.Exists(fileN) = False Then
+                Console.WriteLine("The file '" + fileN + "' does not exist")
+                End
+            End If
+        End If
+
+        Dim tagCol$ = argValue("tag", args)
+        Dim appCol$ = argValue("appname", args)
+
+        If tagCol = "" Or appCol = "" Then
+            Console.WriteLine("You must provide an Excel column containing the --APPNAME and --TAG strings" + vbCrLf + "EXAMPLE:   --FILE example.xlsx --APPNAME A --TAG B" + vbCrLf + "-------     Would use Excel file 'example.xlsx' to tag Applications named in first column A with values in second column B")
+            End
+        End If
+
+
+        Dim newRpt As customRPT = New customRPT
+        Dim rAR As reportingArgs = New reportingArgs
+        '        Dim newrpt A
+        rAR.s1 = appCol ' s1 = APP NAME.. s2 = APP ID
+        rAR.s3 = tagCol ' J = field to map to s1 or s2
+        rAR.someColl = New Collection
+        rAR.someColl2 = New Collection
+        rAR = newRpt.pullXLSfields(rAR, fileN)
+
+        Console.WriteLine("# of Apps in column " + appCol + ": " + rAR.someColl.Count.ToString)
+
+        Dim allApps As List(Of oxAppshort) = getAppListShort()
+        'Console.WriteLine("# of Applications: " + allApps.Count.ToString)
+        Dim allTags As List(Of oxTag) = getAllTags()
+        Console.WriteLine("# of Tags: " + allTags.Count.ToString)
+
+        Dim appCount As Integer = 0
+
+        For appCount = 1 To rAR.someColl.Count
+            Dim apP As oxAppshort = OX.returnAppShortByName(rAR.someColl(appCount), allApps)
+
+            Dim actioN$ = ""
+
+            If apP.appName = "" Then
+                Console.WriteLine("Cannot find app: " + rAR.someColl(appCount))
+                GoTo skipApp
+            End If
+
+            actioN = "APP: " + apP.appName + " [" + apP.appId + "] - "
+
+            Dim appExist As Boolean = True
+            Dim tagExist As Boolean = False
+
+            Dim taG$ = rAR.someColl2(appCount)
+            taG = Trim(taG)
+
+            If taG = "" Then GoTo skipApp 'nothing requested to be tagged
+
+            ' determine if tag needs to be added
+            Dim tId$ = OX.returnTagId(taG, allTags)
+            If tId$ = "" Then
+                tagExist = False
+                actioN += "ADD TAG [" + taG + "] TO MASTER LIST -"
+
+            Else
+                actioN += "TAG EXISTS ID: " + tId + " - "
+                tagExist = True
+            End If
+
+            If commitChanges = True Then
+                'here add tag to list
+                'reload all tags
+                'now we have id
+                If tagExist = False Then
+                    Call addTag(taG)
+                    allTags = getAllTags()
+                    tId$ = OX.returnTagId(taG, allTags)
+                    If tId = "" Then
+                        Console.WriteLine("Problem adding tag " + taG + " - ABORTING.. Fix this tag in the XLS (illegal char?)")
+                        GoTo skipApp
+                    Else
+                        Console.WriteLine("New tag '" + taG + "' [" + tId + "] added")
+                        actioN += " [ADDED] -"
+                        tagExist = True
+                    End If
+                End If
+            End If
+
+            Dim tagExistOnApp As Boolean = False
+
+            For Each appTag In apP.tags
+                If appTag.tagId = tId Then
+                    tagExistOnApp = True
+                End If
+            Next
+
+            If tagExistOnApp = True Then
+                actioN += "TAG ALREADY EXISTS ON APP"
+                Console.WriteLine(actioN)
+            Else
+                ' here we add
+                actioN += "COMMITTING TAG TO APP - "
+                If commitChanges = False Then
+                    Console.WriteLine(actioN + " COMMIT FALSE")
+                Else
+                    Dim modAppTag As editTagsRequestVARS = New editTagsRequestVARS
+                    modAppTag.addedTagsIds.Add(tId)
+                    modAppTag.appIds.Add(apP.appId)
+                    'here add tag to app
+                    Call setEditTagsVarsRequests(modAppTag)
+                    Call setUpAPICall("modifyAppsTags")
+                    Console.WriteLine(actioN + " COMPLETE")
+                End If
+
+            End If
+
+skipApp:
+        Next
+
+        End
+    End Sub
 
 
 
@@ -1003,6 +1456,8 @@ skipThatOne:
             Case "getIssues", "getIssuesShort"
                 Dim respIssue As listIssues = New listIssues
                 respIssue = OX.getListIssues(Replace(fileName, ".json", "0.json"))
+                Console.WriteLine("Just got +" + Replace(fileName, ".json", "0.json"))
+
                 With respIssue
                     Console.WriteLine("Total Issues: " + .totalIssues.ToString)
                     Console.WriteLine("Filtered Issues: " + .totalFilteredIssues.ToString)
@@ -1013,13 +1468,14 @@ skipThatOne:
                 numResponseFiles = 0
                 'this was the first file
 
-                Do Until numResponseFiles = numIssueRequests(respIssue.totalFilteredIssues)
+                ' Console.WriteLine("Starting loop From 0 to " + numIssueRequests(respIssue.totalFilteredIssues).ToString)
+
+                Do Until numResponseFiles = numIssueRequests(respIssue.totalFilteredIssues) - 1
                     numResponseFiles += 1
-                    Console.WriteLine("Calling OXAPI: " + numResponseFiles.ToString + " OF " + numIssueRequests(respIssue.totalFilteredIssues).ToString + " requests")
+                    Console.WriteLine("Calling OXAPI: " + (numResponseFiles + 1).ToString + " OF " + numIssueRequests(respIssue.totalFilteredIssues).ToString + " requests")
                     Call setGetIssuesVars(issueLimit * numResponseFiles, doShortIssues)
                     Call setUpAPICall(apiCall, Replace(fileName, ".json", numResponseFiles.ToString + ".json"))
                     goUpALine()
-
                 Loop
 
                 Call setGetIssuesVars(0, doShortIssues)
@@ -1130,12 +1586,13 @@ skipThatOne:
 
     End Sub
 
-    Public Sub setIssueReqVars(issueId$)
+    Public Sub setIssueReqVars(issueId$, Optional ByVal fileN$ = "")
         Dim reqVars As newIssueDetailRequestVARS = New newIssueDetailRequestVARS(issueId)
         OX = New oxWrapper("", "")
         Dim newJson$ = OX.jsonGetNewIssueDetailVars(reqVars)
         'Console.WriteLine(newJson)
-        Call saveJSONtoFile(newJson, Path.Combine(pyDir, "getSingleIssue.variables.json"))
+        If fileN = "" Then fileN = "getSingleIssue.variables.json"
+        Call saveJSONtoFile(newJson, Path.Combine(pyDir, fileN))
     End Sub
 
     Public Sub setGetAppsShortVars(offSet As Integer)
@@ -1300,6 +1757,59 @@ skipThatOne:
     End Sub
 
 
+
+    'fuzzy matching
+    Public Function GetSimilarity(string1 As String, string2 As String) As Single
+        Dim dis As Single = ComputeDistance(string1, string2)
+        Dim maxLen As Single = string1.Length
+        If maxLen < string2.Length Then
+            maxLen = string2.Length
+        End If
+        If maxLen = 0.0F Then
+            Return 1.0F
+        Else
+            Return 1.0F - dis / maxLen
+        End If
+    End Function
+
+    Private Function ComputeDistance(s As String, t As String) As Integer
+        Dim n As Integer = s.Length
+        Dim m As Integer = t.Length
+        Dim distance As Integer(,) = New Integer(n, m) {}
+        ' matrix
+        Dim cost As Integer = 0
+        If n = 0 Then
+            Return m
+        End If
+        If m = 0 Then
+            Return n
+        End If
+        'init1
+
+        Dim i As Integer = 0
+        While i <= n
+            distance(i, 0) = System.Math.Max(System.Threading.Interlocked.Increment(i), i - 1)
+        End While
+        Dim j As Integer = 0
+        While j <= m
+            distance(0, j) = System.Math.Max(System.Threading.Interlocked.Increment(j), j - 1)
+        End While
+        'find min distance
+
+        For i = 1 To n
+            For j = 1 To m
+                cost = (If(t.Substring(j - 1, 1) = s.Substring(i - 1, 1), 0, 1))
+                distance(i, j) = Math.Min(distance(i - 1, j) + 1, Math.Min(distance(i, j - 1) + 1, distance(i - 1, j - 1) + cost))
+            Next
+        Next
+        Return distance(n, m)
+    End Function
+
+
+
+
+
+
     Public Function buildIssues(fileN$, numFiles As Integer) As List(Of issueS)
         Dim allIssues As List(Of issueS) = New List(Of issueS)
 
@@ -1323,7 +1833,7 @@ skipThatOne:
         Next
 
 
-        Console.WriteLine("Total # of files (" + issueLimit.ToString + " issues per file): " + (numFiles - 1).ToString)
+        Console.WriteLine("Total # of files (" + issueLimit.ToString + " issues per file): " + (numFiles + 1).ToString)
         Console.WriteLine("# of Issues: " + allIssues.Count.ToString)
         Return allIssues
     End Function
@@ -1364,6 +1874,7 @@ skipThatOne:
         Dim cFile$
 
         For currFile = 0 To numFiles
+            Console.WriteLine("Loading " + Replace(fileN, ".json", currFile.ToString + ".json"))
             cFile = Replace(fileN, ".json", currFile.ToString + ".json")
             safeKILL(Path.Combine(cacheDir, cFile))
             FileCopy(cFile, Path.Combine(cacheDir, cFile))
@@ -1424,6 +1935,37 @@ skipThatOne:
         Return allIssues
     End Function
 
+    Private Sub sfRoiRPT(allSFs As List(Of sevF), numR As Integer, numE As Integer, numD As Integer, fileN$)
+        Dim newRpt As customRPT = New customRPT
+        Dim rAR As reportingArgs = New reportingArgs
+
+        Console.WriteLine("Creating SF ROI XLS..")
+
+        Dim bizPRI As Integer = 0
+        With rAR
+            .s1 = fileN
+            .s2 = Path.Combine(ogDir, "roi_tags_template.xlsx")
+
+            If IO.File.Exists(.s2) = False Then
+                Console.WriteLine("ERROR: Unable to find file " + .s2 + " - aborting")
+                End
+            End If
+
+            .someColl = New Collection
+            .someColl2 = New Collection
+            For Each S In allSFs
+                .someColl.Add(S.shortName)
+                .someColl2.Add(S.numOccurrences)
+                If InStr(S.shortName, " Business Priority") > 0 Then bizPRI += S.numOccurrences
+            Next
+            .s3 = bizPRI.ToString
+            .numeriC = numR
+            .numeriC2 = numE
+            .numeriC3 = numD
+        End With
+
+        Call newRpt.doROIrpt(rAR)
+    End Sub
 
     Private Sub appTagRPT(allApps As List(Of oxAppshort), fileN$)
         Dim newRpt As customRPT = New customRPT
@@ -1431,18 +1973,19 @@ skipThatOne:
 
         rAR.someColl = New Collection
         rAR.s1 = fileN
+        rAR.s3 = "TAGS"
 
-        Call safeKILL(fileN)
+        Call safeKILL(rAR.s1)
 
         Dim totalNum As Integer = 0
         Console.WriteLine("Calculating total number of tags")
 
         For Each aA In allApps
             For Each aTag In aA.tags
-
-                If aTag.isOxTag = True Then
-                    totalNum += 1
-                End If
+                '
+                '                'If aTag.isOxTag = True Then
+                totalNum += 1
+                '                'End If
             Next
         Next
 
@@ -1460,12 +2003,12 @@ skipThatOne:
         For Each aA In allApps
             For Each aTag In aA.tags
 
-                If aTag.isOxTag = True Then
-                    xls3d(roW, 0) = aTag.name
-                    xls3d(roW, 1) = aA.appName
-                    xls3d(roW, 2) = 1
-                    roW += 1
-                End If
+                'If aTag.isOxTag = True Then
+                xls3d(roW, 0) = aTag.name
+                xls3d(roW, 1) = aA.appName
+                xls3d(roW, 2) = 1
+                roW += 1
+                'End If
             Next
         Next
 
@@ -1479,18 +2022,17 @@ skipThatOne:
 
         Call newRpt.dump2XLS(xls3d, roW - 1, rAR,, True)
 
-        End
     End Sub
-    Private Sub issueDetailRpt(ByRef allI As List(Of singleIssue), fileN$)
+    Private Sub issueDetailRpt(ByRef allI As List(Of issueS), fileN$)
         Dim newRpt As customRPT = New customRPT
         Dim rAR As reportingArgs = New reportingArgs
 
-        Console.WriteLine("Building report for " + allI.Count.ToString + " single issues")
+        Console.WriteLine("Building report for " + allI.Count.ToString + " issues")
 
         rAR.someColl = New Collection
-        rAR.s1 = fileN + "_issues.xlsx"
+        rAR.s1 = Path.Combine(ogDir, fileN + "_issues.xlsx")
 
-        Call safeKILL(fileN)
+        Call safeKILL(rAR.s1)
         ' first the issues for dedup testing
 
         With rAR.someColl
@@ -1548,7 +2090,7 @@ skipThatOne:
 
         Dim roW As Long = 0
         For K = 0 To allI.Count - 1 ' In allI
-            Dim aA As singleIssue = allI(K)
+            Dim aA As issueS = allI(K)
             'xls3d(0, 0) = "some string"
             'Console.WriteLine(aA.issueId)
             xls3d(roW, 0) = aA.issueId
@@ -1558,7 +2100,7 @@ skipThatOne:
             If Mid(aA.app.name, 1, 1) <> "*" Then match = True
             xls3d(roW, 3) = CStr(match)
             Dim rID$ = ""
-            If aA.sourceTools(0) = "WIZ" And Val(Mid(aA.resource.id, 1, 1)) > 0 Then rID = "WIZ" Else rID = aA.resource.id
+            rID = aA.sourceTools(0) ' = "WIZ" And Val(Mid(aA.resource.id, 1, 1)) > 0 Then rID = "WIZ" Else rID = aA.resource.id
             xls3d(roW, 4) = rID
             xls3d(roW, 5) = aA.severity
             xls3d(roW, 6) = aA.originalToolSeverity
@@ -1572,7 +2114,7 @@ skipThatOne:
             If aA.sourceTools.Count > 2 Then sT3 = aA.sourceTools(2)
             xls3d(roW, 11) = sT2
             xls3d(roW, 12) = sT3
-            xls3d(roW, 13) = fileNames(K)
+            xls3d(roW, 13) = "" ' wtf is this.. fileNames(K)
             xls3d(roW, 14) = aA.numSevFactors()
             allSF += aA.numSevFactors
             xls3d(roW, 15) = aA.numSevFactors(True)
@@ -1589,13 +2131,13 @@ skipThatOne:
 
         Dim xls3d2(allSF - 1, 15) As Object
         For K = 0 To allI.Count - 1 ' In allI
-            Dim aA As singleIssue = allI(K)
+            Dim aA As issueS = allI(K)
             'issue stuff
             Dim rID$ = ""
-            If aA.sourceTools(0) = "WIZ" And Val(Mid(aA.resource.id, 1, 1)) > 0 Then rID = "WIZ" Else rID = aA.resource.id
+            rID = aA.sourceTools(0) ' = "WIZ" ' And Val(Mid(aA.resource.id, 1, 1)) > 0 Then rID = "WIZ" Else rID = aA.resource.id
             Dim issueID$ = aA.issueId
             Dim mainTitle$ = aA.mainTitle
-            Dim fN$ = fileNames(K)
+            'Dim fN$ = fileNames(K)
 
             For Each SF In aA.severityChangedReason
                 xls3d2(roW, 0) = SF.shortName
@@ -1604,9 +2146,9 @@ skipThatOne:
                 xls3d2(roW, 6) = SF.reason
                 xls3d2(roW, 7) = issueID
                 xls3d2(roW, 8) = mainTitle
-                xls3d2(roW, 9) = fN
+                xls3d2(roW, 9) = "" ' fN..wtf
                 xls3d2(roW, 10) = 1
-                xls3d2(roW, 14) = LCase(SF.changeCategory)
+                xls3d2(roW, 14) = UCase(SF.changeCategory)
                 Dim match = False
                 If Mid(aA.app.name, 1, 1) <> "*" Then match = True
                 xls3d2(roW, 15) = CStr(match)
@@ -1650,7 +2192,8 @@ skipThatOne:
 
         rAR.s3 = "SF"
         rAR.someColl = sfColl
-        rAR.s1 = fileN + "_sevFactors.xlsx"
+        rAR.s1 = Path.Combine(ogDir, fileN + "_sevFactors.xlsx")
+        Call safeKILL(rAR.s1)
 
 
         Call newRpt.dump2XLS(xls3d2, allSF, rAR,, True)
@@ -1674,6 +2217,11 @@ skipThatOne:
             .Add("PRIORITY")
             .Add("CATEGORY")
             .Add("POLICY")
+
+            'new 8/21
+            '  .Add("COMPLIANCE")
+            '  .Add("COMP_SECTION")
+
             .Add("ISSUE_TITLE")
             .Add("SEVERITY")
             .Add("DATE_FOUND")
@@ -1704,6 +2252,390 @@ skipThatOne:
 
         End
     End Sub
+
+    Private Sub devDetailXLS(args() As String)
+        Dim fileN$ = argValue("infile", args)
+        If System.IO.File.Exists(fileN) = False Then
+            Console.WriteLine("You must provide a file to parse and report on.")
+        End If
+        Dim userDetail As devDetail = New devDetail
+        userDetail = OX.getCommittingUsers(fileN)
+
+        ' Console.WriteLine("# of Committing Users: " + userDetail.getOrgUsersByOrgId.users.Count.ToString)
+
+        Dim numYear As Integer = 0
+        Dim num180 As Integer = 0
+        Dim num90 As Integer = 0
+        Dim num30 As Integer = 0
+
+        Console.WriteLine("Org Name: " + userDetail.getOrgUsersByOrgId.display_name)
+        Console.WriteLine("Dev Count/ Dev Count API: " + userDetail.getOrgUsersByOrgId.developersCount.ToString + "/" + userDetail.getOrgUsersByOrgId.developersCountAPI.ToString)
+        Console.WriteLine("Users with 1yr commit info: " + userDetail.getOrgUsersByOrgId.users.Count.ToString)
+        Console.WriteLine(vbCrLf + "# devs commit within: ")
+
+
+        For Each U In userDetail.getOrgUsersByOrgId.users
+            Dim uDate As DateTime = CDate(U.latestCommitDate)
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 365 Then
+                'Console.WriteLine("Within year")
+                numYear += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 180 Then
+                'Console.WriteLine("Within 180")
+                num180 += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 90 Then
+                'Console.WriteLine("Within 90")
+                num90 += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 30 Then
+                'Console.WriteLine("Within 30")
+                num30 += 1
+            End If
+        Next
+        Console.WriteLine("30 days: " + num30.ToString)
+        Console.WriteLine("90 days: " + num90.ToString)
+        Console.WriteLine("180 days:" + num180.ToString)
+        Console.WriteLine("365 days:" + numYear.ToString)
+
+        Dim outFile$ = argValue("file", args)
+
+        If outFile$ <> "" Then
+            Call userDetailRpt(userDetail.getOrgUsersByOrgId.users, outFile, args)
+        End If
+
+    End Sub
+
+    Private Sub userDetailRpt(allUsers As List(Of committingUsers), fileN$, args() As String)
+        Dim newRpt As customRPT = New customRPT
+        Dim rAR As reportingArgs = New reportingArgs
+
+        rAR.someColl = New Collection
+        rAR.s1 = fileN
+
+        Dim minDup As Single = 0.81
+        minDup = Val(argValue("mindup", args))
+        If minDup = 0 Then minDup = 0.81
+
+
+        Dim last90Emails As Collection = New Collection
+
+        Call safeKILL(fileN)
+
+        'Console.WriteLine("Building output from results")
+
+        With rAR.someColl
+            .Add("EMAIL")
+            .Add("NAME")
+            .Add("COMMIT_DATE")
+            .Add("COMMIT_REPO")
+            .Add("#_DUP")
+            .Add("POSS_MATCH")
+            .Add("#_SVCACCT")
+            .Add("#_30")
+            .Add("#_90")
+            .Add("#_180")
+            .Add("#_YEAR")
+        End With
+
+        rAR.s3 = "DEV"
+
+        Dim xls3d(allUsers.Count - 1, 10) As Object
+        ''Dim numYear As Integer = 0
+        'D 'im num180 As Integer = 0
+        'D'im num90 As Integer = 0
+        'Dim num30 As Integer = 0
+
+        Dim tlNum90 As Integer = 0
+
+        Dim roW As Long = 0
+        For Each aA In allUsers
+            xls3d(roW, 0) = aA.committerEmail
+            xls3d(roW, 1) = aA.committerAuthor
+            xls3d(roW, 2) = CDate(aA.latestCommitDate).ToShortDateString
+            xls3d(roW, 3) = aA.link
+            xls3d(roW, 4) = 0
+            xls3d(roW, 5) = ""
+            xls3d(roW, 6) = 0
+            Dim uDate As DateTime = CDate(aA.latestCommitDate)
+
+            Dim numYear As Integer = 0
+            Dim num180 As Integer = 0
+            Dim num90 As Integer = 0
+            Dim num30 As Integer = 0
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 365 Then
+                'Console.WriteLine("Within year")
+                numYear += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 180 Then
+                'Console.WriteLine("Within 180")
+                num180 += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 90 Then
+                'Console.WriteLine("Within 90")
+                num90 += 1
+                last90Emails.Add(aA.committerEmail)
+                tlNum90 += 1
+            End If
+            If DateDiff(DateInterval.Day, uDate, Date.Now) < 30 Then
+                'Console.WriteLine("Within 30")
+                num30 += 1
+            End If
+
+            xls3d(roW, 7) = num30
+            xls3d(roW, 8) = num90
+            xls3d(roW, 9) = num180
+            xls3d(roW, 10) = numYear
+            roW += 1
+        Next
+
+        Console.WriteLine("Throwing object of " + (allUsers.Count * 11).ToString + " elements at Excel..")
+        rAR.booL1 = True ' create XLS not CSV
+
+        Call newRpt.dump2XLS(xls3d, allUsers.Count, rAR,, True)
+
+
+
+
+        Console.WriteLine("Searching for duplicates..Match% set to >" + minDup.ToString)
+
+        'svc account search
+        'Dim svcA As Collection = spotServiceAccounts()
+
+        ' duplicates report
+        rAR = New reportingArgs
+        rAR.someColl = New Collection
+
+        With rAR.someColl
+            .Add("FIRST_ENTRY(COMMIT_IN_90)")
+            .Add("MATCH_%")
+            .Add("POSSIBLE_DUPS(COMMIT_IN_90)")
+            .Add("#_SUBTRACT")
+        End With
+
+        rAR.s1 = Replace(fileN, ".xlsx", "") + "_dups.xlsx"
+        rAR.s3 = "DEVDUP"
+
+        Dim devNum As Integer = 0
+        Dim K As Integer = 0
+        Dim loopNum As Integer = 0
+        Dim listOfDups As List(Of duplicateDev) = New List(Of duplicateDev)
+
+        Dim totalRows As Integer
+
+        Dim alreadyCounted As Collection = New Collection
+        Dim currEntry As duplicateDev = New duplicateDev
+        Dim dup90 As Integer = 0
+
+        For K = 0 To allUsers.Count - 1
+            Dim addTo90 As Boolean = False
+
+            If grpNDX(alreadyCounted, K.ToString) Then GoTo skipOuterLoop
+            If isServiceAccount(LCase(allUsers(K).committerAuthor)) Then GoTo skipOuterLoop
+
+            devNum = K
+            currEntry = New duplicateDev
+            currEntry.firstEntry = allUsers(K).committerAuthor
+            currEntry.firstEmail = allUsers(K).committerEmail
+            currEntry.dupUsers = New List(Of possibleMatch)
+
+            If grpNDX(last90Emails, allUsers(K).committerEmail) > 0 Then
+                currEntry.firstEmailIn90 = True
+                addTo90 = True
+            Else
+                currEntry.firstEmailIn90 = False
+            End If
+
+            If K Mod 100 = 0 Then Console.WriteLine("[" + (K + 1).ToString + "/" + allUsers.Count.ToString + "] Checking for duplicates on " + currEntry.firstEntry)
+
+
+            For loopNum = 0 To allUsers.Count - 1
+                If loopNum = devNum Then GoTo skipMe
+
+                If allUsers(loopNum).committerAuthor = currEntry.firstEntry Then
+                    Dim newDup As possibleMatch = New possibleMatch
+                    newDup.matchName = allUsers(loopNum).committerAuthor
+                    newDup.matchEmail = allUsers(loopNum).committerEmail
+                    newDup.matchNum = 1
+                    If grpNDX(last90Emails, newDup.matchEmail) > 0 Then
+                        newDup.in90 = True
+                        addTo90 = True
+                        'dup90 += 1
+                        'Console.WriteLine("USER: " + newDup.matchEmail)
+                    Else
+                        newDup.in90 = False
+                    End If
+                    currEntry.dupUsers.Add(newDup)
+                    alreadyCounted.Add(loopNum.ToString)
+                    totalRows += 1
+                    'Console.WriteLine("Added dup for " + currEntry.firstEmail)
+                    GoTo skipMe
+                End If
+
+
+                Dim matchPCT As Single = 0
+                matchPCT = GetSimilarity(LCase(currEntry.firstEntry), LCase(allUsers(loopNum).committerAuthor))
+
+                If matchPCT >= minDup Then
+                    ' Console.WriteLine("Testing " + allUsers(loopNum).committerAuthor)
+                    Dim newDup As possibleMatch = New possibleMatch
+                    newDup.matchName = allUsers(loopNum).committerAuthor
+                    newDup.matchEmail = allUsers(loopNum).committerEmail
+                    newDup.matchNum = Math.Round(matchPCT, 2)
+                    If grpNDX(last90Emails, newDup.matchEmail) > 0 Then
+                        newDup.in90 = True
+                        addTo90 = True
+                        'Console.WriteLine("USER: " + newDup.matchEmail)
+                        'dup90 += 1
+                    Else
+                        newDup.in90 = False
+                    End If
+                    currEntry.dupUsers.Add(newDup)
+                    alreadyCounted.Add(loopNum.ToString)
+                    totalRows += 1
+                End If
+skipMe:
+            Next
+            If addTo90 = False Then GoTo skipOuterLoop
+
+            If currEntry.dupUsers.Count > 0 Then
+                listOfDups.Add(currEntry)
+                dup90 += (currEntry.numCommittersIn90 - 1)
+                totalRows += 1
+            End If
+skipOuterLoop:
+
+        Next
+
+        Console.WriteLine("Looking for service accounts")
+
+
+        Dim svcAccount90 As Integer = 0
+
+        currEntry = New duplicateDev
+        currEntry.firstEntry = "SERVICE ACCOUNT"
+        currEntry.firstEmail = "possible matches"
+        currEntry.dupUsers = New List(Of possibleMatch)
+
+        For Each U In allUsers
+            'Dim founD As Boolean = False
+            Dim a$ = LCase(U.committerAuthor)
+
+            If isServiceAccount(U.committerAuthor) = True Then
+                Console.WriteLine("SVC ACCOUNT: " + U.committerAuthor)
+                Dim newEntry As possibleMatch = New possibleMatch
+                newEntry.matchName = U.committerAuthor
+                newEntry.matchEmail = U.committerEmail
+                newEntry.matchNum = 1
+                If grpNDX(last90Emails, newEntry.matchEmail) > 0 Then
+                    newEntry.in90 = True
+                    'Console.WriteLine("SVC ACCOUNT: " + newEntry.matchEmail)
+                    svcAccount90 += 1
+                    totalRows += 1
+                Else
+                    newEntry.in90 = False
+                End If
+                currEntry.dupUsers.Add(newEntry)
+            End If ' founD = True
+
+        Next
+        'If currEntry.dupUsers.Count > 0 Then
+        listOfDups.Add(currEntry)
+        'End If
+
+        If listOfDups.Count = 0 Then
+            Console.WriteLine("No duplicates or service accounts detected")
+            Exit Sub
+        End If
+
+        Dim dup3d(totalRows - 1, 3) As Object
+
+        '        'Dim totalSubtract As Integer = 0
+        '        .Add("FIRST_ENTRY_NAME")
+        '        .Add("FIRST_EMAIL")
+        '        .Add("POSSIBLE_DUPS(COMMIT_IN_90)")
+        '        .Add("#_SUBTRACT")
+
+
+        roW = 0
+        For Each aA In listOfDups
+            dup3d(roW, 0) = aA.firstEntry + "/" + aA.firstEmail + " (" + aA.firstEmailIn90.ToString + ")"
+            dup3d(roW, 1) = aA.lowestMatchNum  'Else dup3d(roW, 1) = ""
+            '            dup3d(roW, 1) = aA.firstEmailIn90.ToString
+            Dim d$ = ""
+            For Each duP In aA.dupUsers
+                d$ += duP.matchName + "/" + duP.matchEmail + " (" + duP.in90.ToString + ")" + vbCrLf
+            Next
+            d = Mid(d, 1, Len(d) - 1)
+            dup3d(roW, 2) = d
+            If aA.firstEntry = "SERVICE ACCOUNT" Then dup3d(roW, 3) = aA.numCommittersIn90 Else dup3d(roW, 3) = aA.numCommittersIn90 - 1
+            roW += 1
+        Next
+
+        Console.WriteLine("Throwing object of " + (totalRows * 5).ToString + " elements at Excel..")
+        rAR.booL1 = True ' create XLS not CSV
+
+        Call newRpt.dump2XLS(dup3d, totalRows, rAR)
+
+
+        Console.WriteLine("=================================")
+        Console.WriteLine("90 DAY SUMMARY")
+        Console.WriteLine("=================================")
+        Console.WriteLine("COMMITTING AUTHORS: " + tlNum90.ToString)
+        Console.WriteLine("LIKELY DUPLICATES:  " + dup90.ToString)
+        Console.WriteLine("SERVICE ACCOUNTS:   " + svcAccount90.ToString)
+        Console.WriteLine("EST NET TOTAL DEVS: " + (tlNum90 - dup90 - svcAccount90).ToString)
+
+
+
+    End Sub
+
+    Private Function isServiceAccount(auth$) As Boolean
+        Dim S As Collection = New Collection
+        S = spotServiceAccounts()
+
+        isServiceAccount = False
+        auth = LCase(auth)
+
+        If InStr(auth, "build") > 0 Then
+            Dim K As Integer
+            K = 1
+        End If
+
+        For Each a In S
+            If InStr(auth, a) Then
+                isServiceAccount = True
+                'Console.WriteLine("Found " + a)
+            End If
+        Next
+
+    End Function
+
+    Private Function spotServiceAccounts() As Collection
+        Dim svcA As Collection = New Collection
+        svcA.Add("svc")
+        svcA.Add("github")
+        svcA.Add("bitbucket")
+        svcA.Add("gitlab")
+        svcA.Add("azure")
+        svcA.Add("aws")
+        svcA.Add("gcp")
+        svcA.Add("service")
+        svcA.Add("build")
+        svcA.Add("automation")
+        svcA.Add("unknown")
+        svcA.Add("jenkins")
+        svcA.Add("terraform")
+        svcA.Add("root")
+        svcA.Add("pipeline")
+        svcA.Add("robot")
+        svcA.Add("circleci")
+        svcA.Add("snyk")
+        svcA.Add("system")
+        svcA.Add("ciserver")
+        Return svcA
+    End Function
+
 
     Private Sub issueCSV(allIssues As List(Of issueS), fileN$)
         Dim newRpt As customRPT = New customRPT
@@ -1749,6 +2681,66 @@ skipThatOne:
 
         End
     End Sub
+
+
+    Public Sub createMappingJSON(args As String())
+        Dim newRpt As customRPT = New customRPT
+
+        Dim fileN$ = argValue("xls", args)
+        If fileN = "" Then
+            Console.WriteLine("You must include parameter --XLS (filename) as an input file")
+            If IO.File.Exists(fileN) = False Then Console.WriteLine("Excel file '" + fileN + "' does not exist")
+            End
+        End If
+        Dim jsonF = argValue("file", args)
+        If jsonF = "" Then
+            Console.WriteLine("You must include parameter --FILE (filename) as an output for the json file")
+            End
+        End If
+        Dim mapT = argValue("maptype", args)
+        If mapT = "" Then
+            Console.WriteLine("You must include parameter --MAPTYPE (type)" + vbCrLf + "    Avail: BLACKDUCK")
+            End
+        End If
+        Dim appCOL = argValue("appname", args)
+        If appCOL = "" Then
+            Console.WriteLine("You must include parameter --APPNAME (column)" + vbCrLf + "    Avail: BLACKDUCK")
+            End
+        End If
+        Dim mapCOL = argValue("map", args)
+        If mapCOL = "" Then
+            Console.WriteLine("You must include parameter --MAP (column)" + vbCrLf + "    Avail: BLACKDUCK")
+            End
+        End If
+
+
+        ' THIS NEEDS TO BE PARAMETERIZED --MAPCOLUMN --APPNAME or --APPID
+        Dim rAR As reportingArgs = New reportingArgs
+        rAR.s1 = appCOL '"A" ' s1 = APP NAME.. s2 = APP ID
+        rAR.s3 = mapCOL '"I" ' J = field to map to s1 or s2
+        rAR.someColl = New Collection
+        rAR.someColl2 = New Collection
+        rAR = newrpt.pullXLSfields(rAR, fileN)
+
+        Console.WriteLine("Collection1: " + rAR.someColl.Count.ToString)
+        Console.WriteLine("Collection2: " + rAR.someColl2.Count.ToString)
+
+        '  Select Case LCase(mapT)
+        '      Case "blackduck", "polaris", "veracode"
+        Dim jsoN$ = OX.integrationMapping(rAR.someColl, rAR.someColl2, mapT)
+                safeKILL(jsonF)
+                saveJSONtoFile(jsoN, jsonF)
+                Console.WriteLine("File saved: " + jsonF)
+                '      Case "prob dont use this"
+                '          Dim jsoN$ = OX.integrationMapping(rAR.someColl, rAR.someColl2, mapT)
+                '          safeKILL(jsonF)
+                '          saveJSONtoFile(jsoN, jsonF)
+                '          Console.WriteLine("File saved: " + jsonF)
+                '  End Select
+                End
+    End Sub
+
+
 
     Public Sub processCache() ', objList As List(Of singleIssue))
         '        Console.WriteLine("Kicking off background threads for # files.. " + fileNames.Count.ToString)
@@ -1919,7 +2911,7 @@ errorcatch:
             Next
             Console.WriteLine(lI + vbCrLf)
 
-            Next
+        Next
 
 
     End Sub
@@ -1953,4 +2945,59 @@ errorcatch:
 
         oldP = pC
     End Sub
+
+    Private Function getSFndx(sfList As List(Of sevF), sfText$) As Integer
+        getSFndx = -1
+
+        Dim ctR As Integer = 0
+        For Each S In sfList
+            If LCase(sfText) = LCase(S.shortName) Then
+                getSFndx = ctR
+            End If
+            ctR += 1
+        Next
+    End Function
+
+    Private Class sevF
+        Public numOccurrences As Long
+        Public changeNumber As Decimal
+        ' Public reason As String
+        Public shortName As String
+        Public changeCategory As String
+    End Class
+    Private Class duplicateDev
+        '.Add("FIRST_ENTRY_NAME")
+        '.Add("FIRST_EMAIL")
+        '.Add("MATCH_#")
+        '.Add("MATCH_NAME")
+        '.Add("MATCH_EMAIL")
+        '.Add("#_DUPS")
+        Public firstEntry As String
+        Public firstEmail As String
+        Public firstEmailIn90 As Boolean
+        Public dupUsers As List(Of possibleMatch)
+
+        Public Function lowestMatchNum() As Single
+            Dim x As Single = 99
+            For Each D In dupUsers
+                If D.matchNum < x Then x = D.matchNum
+            Next
+            Return x
+        End Function
+        Public Function numCommittersIn90() As Integer
+            Dim numU As Integer = 0
+            If Me.firstEmailIn90 = True Then numU += 1
+            For Each D In dupUsers
+                If D.in90 = True Then numU += 1
+            Next
+            Return numU
+        End Function
+    End Class
+    Private Class possibleMatch
+        Public matchName As String
+        Public matchEmail As String
+        Public matchNum As Single
+        Public in90 As Boolean
+    End Class
+
 End Module

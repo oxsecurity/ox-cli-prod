@@ -83,7 +83,7 @@ Public Class oxWrapper
         Dim callPython As System.Diagnostics.Process = Process.Start(startInfo)
         ' Process.Start(startInfo)
 
-        If callPython.WaitForExit(30000) = True Then
+        If callPython.WaitForExit(60000) = True Then
             getJSON = True
             FileSystem.ChDir(ogDir)
             Exit Function
@@ -106,6 +106,40 @@ errorcatch:
 
 
 
+
+
+
+
+    Public Function getCommittingUsers(fileN$) As devDetail
+        getCommittingUsers = New devDetail
+        'getCommittingUsers.users = New List(Of committingUsers)
+        'getCommittingUsers.usersFromApi = New List(Of apiUsers)
+        Dim jsoN$ = streamReaderTxt(fileN)
+        Dim nD As JObject = JObject.Parse(jsoN)
+        jsoN = nD.SelectToken("data").ToString
+        'Console.WriteLine(jsoN)
+        Return JsonConvert.DeserializeObject(Of devDetail)(jsoN)
+    End Function
+
+    Public Function integrationMapping(appCollection As Collection, bdCollection As Collection, mapType$) As String
+        Dim mP As bdMappingExport = New bdMappingExport
+        mP.externalTool = LCase(mapType)  '"blackduck"
+
+        Dim K As Integer = 0
+
+        For K = 1 To appCollection.Count
+            Dim a$ = appCollection(K)
+            Dim b$ = bdCollection(K)
+
+            If Len(a) > 0 And Len(b) > 0 Then
+                Dim newMP As mappingProps = New mappingProps
+                newMP.externalToolProject = b
+                newMP.oxRepo = a
+                mP.mappingRepoToProject.Add(newMP)
+            End If
+        Next
+        Return JsonConvert.SerializeObject(mP)
+    End Function
 
     ' Writing the VARS files - consider bringing from main into wrapper
     ' set JSON object as *.variables.json file 
@@ -142,6 +176,15 @@ errorcatch:
         Return jsoN
 
     End Function
+
+
+    Public Function returnGitLabRepos(fileN$) As List(Of glabRepo)
+        returnGitLabRepos = New List(Of glabRepo)
+        Dim jsoN$ = streamReaderTxt(fileN)
+
+        returnGitLabRepos = JsonConvert.DeserializeObject(Of List(Of glabRepo))(jsoN)
+    End Function
+
 
     Public Function returnIssues(json$) As List(Of issueS)
         returnIssues = New List(Of issueS)
@@ -243,6 +286,17 @@ errorcatch:
         Next
     End Function
 
+    Public Function returnAppShortByName(appName$, appList As List(Of oxAppshort)) As oxAppshort
+        returnAppShortByName = New oxAppshort
+        appName = LCase(appName)
+
+        For Each T In appList
+            If LCase(T.appName) = appName Then
+                Return T
+            End If
+        Next
+    End Function
+
     Public Function getUserLogEntries(jsoN$) As List(Of oxUserLogEntry)
         getUserLogEntries = New List(Of oxUserLogEntry)
         Dim nD As JObject = JObject.Parse(jsoN)
@@ -279,6 +333,67 @@ Public Class oxUserLogEntry
     Public [date] As DateTime
 End Class
 
+
+Public Class bdMappingExport
+    ' {
+    Public externalTool As String
+    Public mappingRepoToProject As List(Of mappingProps)
+    Public Sub New()
+        mappingRepoToProject = New List(Of mappingProps)
+    End Sub
+End Class
+
+Public Class mappingProps
+    Public externalToolProject As String
+    Public externalToolProjectVersionToSkipp As List(Of extProjProps)
+    Public externalToolProjectVersionToInclude As List(Of extProjProps)
+    Public oxRepo As String
+    Public Sub New()
+        externalToolProjectVersionToSkipp = New List(Of extProjProps)
+        externalToolProjectVersionToInclude = New List(Of extProjProps)
+    End Sub
+End Class
+
+Public Class extProjProps
+    Public versionName As String
+    '"externalTool": "blackduck",
+    '"mappingRepoToProject": [
+    '  {
+    '     "externalToolProject": "",
+    '     "externalToolProjectVersionToSkipp": [
+    '       {
+    '         "versionName": ""
+    '       }
+    '     ],
+    '     "externalToolProjectVersionToInclude": [
+    '       {
+    '         "versionName": ""
+    '       }
+    '     ],
+    '     "oxRepo": ""
+    '   },
+    '   {
+    '  "externalToolProject": "",
+    '  "externalToolProjectVersionToSkipp": [
+    '    {
+    '      "versionName": ""
+    '    }
+    '  ],
+    '  "e'xternalToolProjectVersionToInclude": [
+    '    {'
+    '      "versionName": ""'
+    '    }
+    '      ],
+    '''      "oxRepo": ""
+    ''    }
+    '  ]
+    '}
+
+End Class
+
+
+
+
 Public Class oxAppIrrelevant
     '   "appId": "51548962",
     ' "appName": "WebGoat",
@@ -292,6 +407,7 @@ Public Class oxAppIrrelevant
 
     Public appId As String
     Public appName As String
+    Public link As String
     Public lastCodeChange As String
     Public irrelevantReasons As List(Of String)
     Public overrideRelevance As String
@@ -303,6 +419,59 @@ Public Class oxAppIrrelevant
     End Sub
 
 End Class
+
+
+
+Public Class devDetail
+    Public getOrgUsersByOrgId As getOrgUsers
+    Public Sub New()
+        getOrgUsersByOrgId = New getOrgUsers
+    End Sub
+End Class
+Public Class getOrgUsers
+    Public developersCount As Integer
+    Public developersCountAPI As Integer
+    Public developersCountCommits As Integer
+    Public display_name As String
+    Public users As List(Of committingUsers)
+    Public usersFromApi As List(Of apiUsers)
+    Public Sub New()
+        users = New List(Of committingUsers)
+        usersFromApi = New List(Of apiUsers)
+    End Sub
+End Class
+Public Class committingUsers
+    Public committerEmail As String
+    Public committerAuthor As String
+    Public link As String
+    Public latestCommitDate As String
+    Public gitType As String
+    Public filtered As Boolean
+End Class
+Public Class apiUsers
+    Public id As String
+    Public username As String
+    Public name As String
+End Class
+
+'GitLab get_projects 8/14
+'Ayman provided JSON for auto-tagging functions of NAMESPACE/group
+Public Class glabRepo
+    Public name As String
+    Public name_with_namespace As String
+    Public web_url As String
+    Public [namespace] As glNamespace
+End Class
+Public Class glNamespace
+    Public name As String
+    Public path As String
+    Public kind As String
+End Class
+
+
+
+
+
 
 Public Class oxAppshort
     Public appId As String
@@ -343,7 +512,7 @@ Public Class oxTag
     Public displayName As String
     Public tagType As String
     Public createdBy As String
-    Public isOxTag As Boolean
+    Public isOxTag? As Boolean
 End Class
 
 Public Class oxPolicy
@@ -455,7 +624,68 @@ Public Class listApps
     Public offset As Long
 End Class
 
+Public Class scaCVE
+    ' "'data": {
+    '   "getSingleIssueInfo": {
+    '       "id": "66ffbc200f1b5c7521a05816",
+    '        "issueId": "584352228-oxPolicy_securityScan_120-org.springframework.boot:spring-boot-starter-web_2.1.2.RELEASE",
 
+    '        "scaVulnerabilities": [
+    '            {
+    '                "cve": "CVE-2022-22965",
+    '                "cveLink": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
+    '                "cvsVer": "9.8",
+    '                "libName": "spring-boot-starter-web",
+    '                "libVersion": "2.1.2.RELEASE",
+    '                "exploitInTheWildLink": "http://packetstormsecurity.com/files/166713/Spring4Shell-Code-Execution.html",
+    '                "dateDiscovered": "Fri Apr 01 2022",
+    '                "minorVerWithFix": "2.6.6",
+    '                "majorVerWithFix": "Not Available",
+    '                "originalSeverity": "Critical"
+    '            },
+    '            {
+    '                "cve": "CVE-2020-1938",
+    Public id As String
+    Public issueId As String
+    Public sbom As sbomInfo
+    Public scaVulnerabilities As List(Of scaVuln)
+
+End Class
+Public Class scaVuln
+    Public cve As String
+    Public cveLink As String
+    Public cvsVer As String
+    Public libName As String
+    Public libVersion As String
+    Public exploitInTheWildLink As String
+    Public dateDiscovered As String
+    Public minorVerWithFix As String
+    Public majorVerWithFix As String
+    Public originalSeverity As String
+End Class
+Public Class sbomInfo
+    '   "sbom": {
+    '            "id": "66ffbc1f0f1b5c7521a048dd",
+    '            "libId": "maven|org.springframework.boot:spring-boot-starter-web|2.1.2.RELEASE",
+    '            "license": "Apache-2.0",
+    '            "appName": "OX-Security-Demo/Bank-Website",
+    '            "dependencyType": "Direct",
+    '            "pkgName": "org.springframework.boot:spring-boot-starter-web",
+    '            "libraryName": "org.springframework.boot:spring-boot-starter-web",
+    '            "libraryVersion": "2.1.2.RELEASE",
+    '            "packageManager": "maven"
+    ''        },
+    Public id As String
+    Public libId As String
+    Public license As String
+    Public appName As String
+    Public dependencyType As String
+    Public pkgName As String
+    Public libraryName As String
+    Public libraryVersion As String
+    Public packageManager As String
+
+End Class
 
 Public Class singleIssue
     'dependencyGraph
@@ -595,34 +825,78 @@ End Class
 '    Public detailedDescription As String
 'End Class
 Public Class issueShort
+    '    query GetIssues($isDemo: Boolean, $getIssuesInput: IssuesInput) {
+    '  getIssues(isDemo: $isDemo, getIssuesInput: $getIssuesInput) {
+    '    issues {
+    '      id
+    '      issueId
+    '      mainTitle
+    '      created
+    '      scanId
+    '      createdAt
+    '      compliance {
+    '      standard
+    '      control
+    '      category
+    '    }
+    '    severityChangedReason {
+    '      changeNumber
+    '      reason
+    '      shortName
+    '      changeCategory
+    '    }
+
     Public id As String
     Public issueId As String
     Public scanId As String
     Public created As Long
     Public createdAt As Long
+    Public compliance As List(Of oxCompliance)
+    Public severityChangedReason As List(Of sevFactor)
 End Class
 Public Class issueS
     ' {
-    '     "id": "651110199778b62c06b261b5",
-    '     "issueId": "584352228-oxPolicy_securityScan_55-CKV_AWS_20-false",
-    '     "mainTitle": "AWS S3 Bucket is configured for PUBLIC read access",
-    '     "secondTitle": "S3 buckets that are publically accessible are one of the leading causes of data exposure and loss. An S3 bucket with public read access provides attackers the ability to access stored data.",
-    '     "name": "IaC issue",
-    '     "created": 1695616812332,
-    '     "scanId": "adb3ff84-85cd-4783-9a7d-3df18af8bda5",
-    '     "owners": [
-    '       "Kostya Zhuruev"
-    '     ],
-    '     "occurrences": 1,
-    '     "comment": null,
-    '     "severity": "Critical",
-    '     "policy": {
-    '     },
-    '     "category": {
-    '     },
-    '     "app": {
-    '     },
-    '     "createdAt": 1693550422116
+    '     improvements in API flexibility removing need for 'issuesShort' 'issueS' 'issuesMedium' etc
+    ' 9/22 changes begin - long term dynamic JSON building for purpose-built processes? or just reuse files
+    ' new structure
+    '  query GetIssues($isDemo: Boolean, $getIssuesInput: IssuesInput) {
+    'g'etIssues(isDemo: $isDemo, getIssuesInput: $getIssuesInput) {
+    ' issues {
+    '   id
+    '   issueId
+    '  mainTitle
+    ''  created
+    '  scanId
+    '  createdAt
+    '  originalToolSeverity
+    'severity
+    ' occurrences
+    '  sourceTools
+    ''  resource {
+    '  id
+    '  type
+    '}
+    '  category {
+    '  name
+    '   categoryId
+    ''}
+    '    app {
+    '  id
+    '  name
+    '  businessPriority
+    '    }
+    '   compliance {
+    '    standard
+    '    control
+    ''    category
+    '    description
+    '  }
+    '  severityChangedReason {
+    '     changeNumber
+    ''     reason
+    '     shortName
+    '     changeCategory
+    '   }
 
     Public id As String
     Public issueId As String
@@ -634,12 +908,51 @@ Public Class issueS
     Public owners As List(Of String)
     Public occurrences As Integer
     Public comment As String
+    Public originalToolSeverity As String
+    'Public resource As issueResources
     Public severity As String
     Public createdAt As Long
     Public policy As oxPolicy
     Public category As oxCategory
     Public app As oxApp
+    Public sourceTools As List(Of String)
+    Public compliance As List(Of oxCompliance) 'this exists only inside getIssuesComp file
+    Public severityChangedReason As List(Of sevFactor)
 
+    Public Sub New()
+        sourceTools = New List(Of String)
+    End Sub
+
+    Public Function numSevFactors(Optional ByVal numReachable As Boolean = False, Optional ByVal numExploitable As Boolean = False, Optional ByVal damagE As Boolean = False) As Integer
+        numSevFactors = Me.severityChangedReason.Count
+
+        If numReachable = False And numExploitable = False And damagE = False Then
+            Exit Function
+        End If
+        numSevFactors = 0
+
+        For Each SF In Me.severityChangedReason
+            If numReachable = True And SF.changeCategory = "Reachable" Then numSevFactors += 1
+            If numExploitable = True And SF.changeCategory = "Exploitable" Then numSevFactors += 1
+            If damagE = True And SF.changeCategory = "Damage" Then numSevFactors += 1
+        Next
+
+    End Function
+    Public Function increasedSev() As Boolean
+        increasedSev = False
+        If returnSeverityNum(Me.originalToolSeverity) < returnSeverityNum(Me.severity) Then increasedSev = True
+    End Function
+    Public Function decreasedSev() As Boolean
+        decreasedSev = False
+        If returnSeverityNum(Me.originalToolSeverity) > returnSeverityNum(Me.severity) Then decreasedSev = True
+    End Function
+
+End Class
+Public Class oxCompliance
+    Public standard As String
+    Public control As String
+    Public category As String
+    Public description As String
 End Class
 Public Class oxCategory
 
