@@ -4,7 +4,6 @@ mutation AddTag($input: AddTagInput!) {
       tagType
       tagId
       name
-      isOxTag
       displayName
       createdBy
     }

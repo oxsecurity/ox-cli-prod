@@ -8,7 +8,6 @@ query GetApplications($getApplicationsInput: GetApplicationsInput) {
           tagId
           name
           displayName
-		  isOxTag
         }
 		       }
     offset
